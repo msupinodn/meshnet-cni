@@ -22,6 +22,7 @@ type VEth struct {
 	NsName   string      // network namespace path (empty = current ns)
 	LinkName string      // interface name
 	IPAddr   []net.IPNet // optional IPv4/v6 addresses
+	MTU      int         // optional MTU (0 means default 1500)
 }
 
 // VxLan describes a VXLAN tunnel endpoint.
@@ -68,9 +69,14 @@ func makeVethPair(name, peer string, mtu int) (netlink.Link, error) {
 	return veth, nil
 }
 
+const DefaultMTU = 1500
+
 // GetVethPair creates a veth pair and returns both links.
-func GetVethPair(name1, name2 string) (link1, link2 netlink.Link, err error) {
-	link1, err = makeVethPair(name1, name2, 1500)
+func GetVethPair(name1, name2 string, mtu int) (link1, link2 netlink.Link, err error) {
+	if mtu <= 0 {
+		mtu = DefaultMTU
+	}
+	link1, err = makeVethPair(name1, name2, mtu)
 	if err != nil {
 		if os.IsExist(err) {
 			err = fmt.Errorf("container veth name provided (%v) already exists", name1)
@@ -234,6 +240,7 @@ func (veth *VEth) RemoveVethLink() error {
 }
 
 // MakeVeth creates a veth pair and places each end into the respective namespace.
+// The MTU is taken from veth1.MTU; 0 means DefaultMTU (1500).
 func MakeVeth(veth1, veth2 VEth) error {
 	tempLinkName1 := veth1.LinkName
 	tempLinkName2 := veth2.LinkName
@@ -245,7 +252,7 @@ func MakeVeth(veth1, veth2 VEth) error {
 		tempLinkName2 = getRandomIFName()
 	}
 
-	link1, link2, err := GetVethPair(tempLinkName1, tempLinkName2)
+	link1, link2, err := GetVethPair(tempLinkName1, tempLinkName2, veth1.MTU)
 	if err != nil {
 		return err
 	}

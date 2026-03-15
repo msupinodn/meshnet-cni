@@ -23,6 +23,7 @@ message Link {
   string local_ip = 4;
   string peer_ip = 5;
   int64 uid = 6;
+  int32 mtu = 7;
 }
 
 message PodQuery {
@@ -49,6 +50,7 @@ message RemotePod {
   string kube_ns = 5;
   int64 vni = 6;
   string node_intf = 7;
+  int32 mtu = 8;
 }
 
 // The proto describes both end of a grpc-wire, the local end and the remote
@@ -89,7 +91,8 @@ message WireDef {
   string topo_ns = 8;
 
   string local_pod_ip = 9;
-  
+
+  int32 mtu = 10;
 }
 
 message WireCreateResponse {
