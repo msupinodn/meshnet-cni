@@ -57,6 +57,10 @@ func (m *Meshnet) Get(ctx context.Context, pod *mpb.PodQuery) (*mpb.Pod, error) 
 		newLink.LocalIp, _, _ = unstructured.NestedString(remoteLink, "local_ip")
 		newLink.PeerIp, _, _ = unstructured.NestedString(remoteLink, "peer_ip")
 		newLink.Uid, _, _ = unstructured.NestedInt64(remoteLink, "uid")
+		mtu, ok, _ := unstructured.NestedInt64(remoteLink, "mtu")
+		if ok && mtu > 0 {
+			newLink.Mtu = int32(mtu)
+		}
 		links[i] = newLink
 	}
 

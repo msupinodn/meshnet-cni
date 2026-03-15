@@ -128,7 +128,7 @@ func CreatGRPCChan(link *mpb.Link, localPod *mpb.Pod, peerPod *mpb.Pod, localCli
 
 	// Build koko's veth struct for the intf to be placed inside the pod
 	inConIntfNm := link.LocalIntf
-	inContainerVeth, err := makeVeth(localPod.NetNs, inConIntfNm, link.LocalIp)
+	inContainerVeth, err := makeVeth(localPod.NetNs, inConIntfNm, link.LocalIp, int(link.Mtu))
 	if err != nil {
 		log.Errorf("Add-GRPC[%s]: Could not create vEth for local pod %s:%s, peer pod %s, err %v", localPod.Name, localPod.Name, inConIntfNm, peerPod.Name, err)
 		return err
@@ -194,6 +194,7 @@ func CreatGRPCChan(link *mpb.Link, localPod *mpb.Pod, peerPod *mpb.Pod, localCli
 		LinkUid:    link.Uid,
 		TopoNs:     peerPod.KubeNs,
 		LocalPodIp: link.PeerIp,
+		Mtu:        link.Mtu,
 	}
 
 	log.Infof("Add-GRPC[%s]: Create GRPC wire: dialing remote node-->%s@%s", localPod.Name, peerPod.Name, url)
@@ -235,6 +236,7 @@ func CreatGRPCChan(link *mpb.Link, localPod *mpb.Pod, peerPod *mpb.Pod, localCli
 		LocalPodNetNs: localPod.NetNs,
 		LocalPodIp:    link.LocalIp,
 		TopoNs:        localPod.KubeNs,
+		Mtu:           link.Mtu,
 	}
 	log.Infof("Add-GRPC[%s]: Creating GRPC wire: adding the local end of the grpc tunnel.", localPod.Name)
 	r, err := localClient.AddGRPCWireLocal(ctx, &wireDefLocal)

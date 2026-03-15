@@ -57,6 +57,7 @@ func CreateOrUpdate(v *mpb.RemotePod) error {
 		ParentIF: srcIntf,
 		IPAddr:   net.ParseIP(v.PeerVtep),
 		ID:       int(v.Vni),
+		MTU:      int(v.Mtu),
 	}
 	vxLanOvrlyLogger.Infof("Created koko vxlan struct %+v", vxlan)
 
