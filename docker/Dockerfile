@@ -34,6 +34,7 @@ ARG TARGETARCH
 
 COPY daemon/ daemon/
 COPY api/ api/
+COPY internal/ internal/
 COPY plugin/ plugin/
 COPY utils/ utils/
 COPY --from=proto_base /src/ .
