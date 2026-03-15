@@ -15,6 +15,8 @@
 package v1beta1
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -37,5 +39,7 @@ func init() {
 		&TopologyList{},
 	)
 	metav1.AddToGroupVersion(Scheme, SchemeGroupVersion)
-	metav1.AddMetaToScheme(Scheme)
+	if err := metav1.AddMetaToScheme(Scheme); err != nil {
+		panic(fmt.Sprintf("failed to add meta to scheme: %v", err))
+	}
 }

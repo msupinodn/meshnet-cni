@@ -93,11 +93,11 @@ func saveConfList(m map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(meshnetCNIPath, bytes, os.FileMode(06444))
+	return ioutil.WriteFile(meshnetCNIPath, bytes, os.FileMode(0644))
 }
 
 func saveInterNodeLinkConf() error {
-	return ioutil.WriteFile(interNodeLinkConf, []byte(os.Getenv("INTER_NODE_LINK_TYPE")), os.FileMode(06444))
+	return ioutil.WriteFile(interNodeLinkConf, []byte(os.Getenv("INTER_NODE_LINK_TYPE")), os.FileMode(0644))
 }
 
 func removeInterNodeLinkConf() error {

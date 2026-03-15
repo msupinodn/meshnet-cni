@@ -15,7 +15,6 @@ spec:
     spec:
       hostNetwork: true
       hostPID: true
-      hostIPC: true
       serviceAccountName: meshnet
       nodeSelector:
         beta.kubernetes.io/arch: amd64
@@ -31,6 +30,7 @@ spec:
           command: ["./entrypoint.sh"]
           resources:
             limits:
+              cpu: "2"
               memory: 10G
             requests:
               cpu: 200m

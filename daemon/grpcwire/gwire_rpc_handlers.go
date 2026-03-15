@@ -55,8 +55,11 @@ func CreateGRPCWireLocal(ctx context.Context, wireDef *mpb.WireDef) (*mpb.BoolRe
 		"daemon":  "meshnetd",
 		"overlay": "gRPC",
 	}).Infof("[ADD-WIRE:LOCAL-END]For pod %s@%s, node iface id %d starting the local packet receive thread", wireDef.LocalPodName, wireDef.IntfNameInPod, locInf.Index)
-	// TODO: handle error here
-	go RecvFrmLocalPodThread(aWire, aWire.LocalNodeIfaceName)
+	go func() {
+		if err := RecvFrmLocalPodThread(aWire, aWire.LocalNodeIfaceName); err != nil {
+			log.Errorf("CreateGRPCWireLocal: RecvFrmLocalPodThread exited with error: %v", err)
+		}
+	}()
 
 	return &mpb.BoolResponse{Response: true}, nil
 }

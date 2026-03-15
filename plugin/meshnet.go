@@ -545,7 +545,7 @@ func SetInterNodeLinkType() {
 
 // -------------------------------------------------------------------------------------------------
 func main() {
-	fp, err := os.OpenFile("/var/log/meshnet-cni.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	fp, err := os.OpenFile("/var/log/meshnet-cni.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
 	if err == nil {
 		log.SetOutput(fp)
 	}
@@ -560,7 +560,11 @@ func main() {
 		retCode = 1
 	}
 	log.Infof("K8S invoked meshnet cni")
-	fp.Close()
+	if fp != nil {
+		if err := fp.Close(); err != nil {
+			log.Errorf("failed to close log file: %v", err)
+		}
+	}
 	os.Exit(retCode)
 }
 

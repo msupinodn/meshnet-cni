@@ -198,14 +198,18 @@ func AddWireInMemNDataStore(wire *GRPCWire, handle *pcap.Handle) int {
 	   not be the desired behavior and we need to throw an error. */
 	wire.IsReady = true
 
-	wires.AddInMemNDataStore(wire, handle)
+	if err := wires.AddInMemNDataStore(wire, handle); err != nil {
+		grpcOvrlyLogger.Errorf("AddWireInMemNDataStore: failed to add wire to data store: %v", err)
+	}
 	return len(wires.wires)
 }
 
 // -------------------------------------------------------------------------------------------------
 // DeleteWire cleans up the active wire map and returns the number of currently added active wire.
 func DeleteWire(wire *GRPCWire) int {
-	wires.AtomicDelete(wire)
+	if err := wires.AtomicDelete(wire); err != nil {
+		grpcOvrlyLogger.Errorf("DeleteWire: failed to delete wire: %v", err)
+	}
 	return len(wires.wires)
 }
 
@@ -267,10 +271,13 @@ func RemoveWireAcrosAll(wire *GRPCWire, inMem bool) error {
 
 	// clean up im-memory wire-map
 	if inMem {
-		wires.AtomicDelete(wire) // Deleting the wire from in-memory data
+		if err := wires.AtomicDelete(wire); err != nil {
+			grpcOvrlyLogger.Errorf("[WIRE-DELETE]: failed to delete wire from in-memory data: %v", err)
+		}
 	}
-	//delete from data-store
-	wire.K8sDelGWire()
+	if err := wire.K8sDelGWire(); err != nil {
+		grpcOvrlyLogger.Errorf("[WIRE-DELETE]: failed to delete wire from data-store: %v", err)
+	}
 	grpcOvrlyLogger.Infof("[WIRE-DELETE]:Successfully removed grpc wire for link %d, iface id %d.", wire.UID, wire.LocalNodeIfaceID)
 	return nil
 }

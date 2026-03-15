@@ -194,7 +194,9 @@ func ReconGWires() error {
 					grpcOvrlyLogger.Errorf("ReconGWires: unable to retrieve wire status: %v", err)
 					continue
 				}
-				reCreateGWire(wireStatus, ctx)
+				if err := reCreateGWire(wireStatus, ctx); err != nil {
+					grpcOvrlyLogger.Errorf("ReconGWires: failed to recreate wire: %v", err)
+				}
 			}
 		}
 		return nil
@@ -436,11 +438,15 @@ func reconLocalGRPCWire(wireDef *mpb.WireDef) error {
 	}
 	aWire := CreateGWire(locInf.Index, wireDef.WireIfNameOnLocalNode, make(chan struct{}), wireDef)
 	aWire.IsReady = true
-	// reconciling, so add only in memory
-	wires.AddInMem(aWire, wrHandle)
+	if err := wires.AddInMem(aWire, wrHandle); err != nil {
+		grpcOvrlyLogger.Errorf("reconLocalGRPCWire: failed to add wire to in-memory map: %v", err)
+	}
 
-	// TODO: handle error here
-	go RecvFrmLocalPodThread(aWire, aWire.LocalNodeIfaceName)
+	go func() {
+		if err := RecvFrmLocalPodThread(aWire, aWire.LocalNodeIfaceName); err != nil {
+			grpcOvrlyLogger.Errorf("reconLocalGRPCWire: RecvFrmLocalPodThread exited with error: %v", err)
+		}
+	}()
 
 	return nil
 }

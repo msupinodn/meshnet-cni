@@ -50,7 +50,9 @@ func (w *wireMap) AddInMemNDataStore(wire *GRPCWire, handle *pcap.Handle) error 
 		linkUID:   wire.UID,
 	}] = wire
 
-	wire.K8sStoreGWire()
+	if err := wire.K8sStoreGWire(); err != nil {
+		grpcOvrlyLogger.Errorf("AddInMemNDataStore: failed to store wire in k8s: %v", err)
+	}
 
 	w.handles[wire.LocalNodeIfaceID] = handle
 	return nil
