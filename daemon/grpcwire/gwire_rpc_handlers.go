@@ -11,7 +11,7 @@ import (
 	"github.com/google/gopacket/pcap"
 	mpb "github.com/networkop/meshnet-cni/daemon/proto/meshnet/v1beta1"
 	"github.com/networkop/meshnet-cni/utils/wireutil"
-	koko "github.com/redhat-nfvpe/koko/api"
+	koko "github.com/networkop/meshnet-cni/internal/koko"
 )
 
 func CreateGRPCWireLocal(ctx context.Context, wireDef *mpb.WireDef) (*mpb.BoolResponse, error) {

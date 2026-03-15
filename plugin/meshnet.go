@@ -13,7 +13,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/davecgh/go-spew/spew"
-	koko "github.com/redhat-nfvpe/koko/api"
+	koko "github.com/networkop/meshnet-cni/internal/koko"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"google.golang.org/grpc"

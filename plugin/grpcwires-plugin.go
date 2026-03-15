@@ -10,7 +10,7 @@ import (
 	"github.com/containernetworking/plugins/pkg/ns"
 	mpb "github.com/networkop/meshnet-cni/daemon/proto/meshnet/v1beta1"
 	"github.com/networkop/meshnet-cni/utils/wireutil"
-	koko "github.com/redhat-nfvpe/koko/api"
+	koko "github.com/networkop/meshnet-cni/internal/koko"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

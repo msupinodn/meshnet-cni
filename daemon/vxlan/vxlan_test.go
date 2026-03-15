@@ -4,18 +4,18 @@ import (
 	"net"
 	"testing"
 
-	"github.com/redhat-nfvpe/koko/api"
+	"github.com/networkop/meshnet-cni/internal/koko"
 	"github.com/vishvananda/netlink"
 )
 
 func TestVxlan(t *testing.T) {
 	tests := []struct {
-		expected api.VxLan
+		expected koko.VxLan
 		found    *netlink.Vxlan
 		same     bool
 	}{
 		{
-			expected: api.VxLan{
+			expected: koko.VxLan{
 				ID:     5001,
 				IPAddr: net.IPv4(1, 1, 1, 1),
 			},
@@ -26,7 +26,7 @@ func TestVxlan(t *testing.T) {
 			same: true,
 		},
 		{
-			expected: api.VxLan{
+			expected: koko.VxLan{
 				ID:     5001,
 				IPAddr: net.IPv4(1, 1, 1, 1),
 			},
@@ -37,7 +37,7 @@ func TestVxlan(t *testing.T) {
 			same: false,
 		},
 		{
-			expected: api.VxLan{
+			expected: koko.VxLan{
 				ID:     5001,
 				IPAddr: net.IPv4(1, 1, 1, 1),
 			},

@@ -11,7 +11,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 	"github.com/openconfig/gnmi/errlist"
-	koko "github.com/redhat-nfvpe/koko/api"
+	koko "github.com/networkop/meshnet-cni/internal/koko"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

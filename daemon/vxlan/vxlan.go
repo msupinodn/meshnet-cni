@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/containernetworking/plugins/pkg/ns"
-	"github.com/redhat-nfvpe/koko/api"
+	"github.com/networkop/meshnet-cni/internal/koko"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 
@@ -34,7 +34,7 @@ func CreateOrUpdate(v *mpb.RemotePod) error {
 	}
 
 	// Creating koko Veth struct
-	veth := api.VEth{
+	veth := koko.VEth{
 		NsName:   v.NetNs,
 		LinkName: v.IntfName,
 	}
@@ -53,7 +53,7 @@ func CreateOrUpdate(v *mpb.RemotePod) error {
 	vxLanOvrlyLogger.Infof("Created koko Veth struct %+v", veth)
 
 	// Creating koko vxlan struct
-	vxlan := api.VxLan{
+	vxlan := koko.VxLan{
 		ParentIF: srcIntf,
 		IPAddr:   net.ParseIP(v.PeerVtep),
 		ID:       int(v.Vni),
@@ -77,13 +77,13 @@ func CreateOrUpdate(v *mpb.RemotePod) error {
 				return fmt.Errorf(" MESHNETD: Error when removing an old Vxlan interface with koko: %s", err)
 			}
 
-			if err = api.MakeVxLan(veth, vxlan); err != nil {
-				if strings.Contains(err.Error(), "file exists") {
-					vxLanOvrlyLogger.Infof(" MESHNETD: Error when creating a Vxlan interface with koko, file exists")
-				} else {
-					return fmt.Errorf(" MESHNETD: Error when re-creating a Vxlan interface with koko: %s", err)
-				}
+		if err = koko.MakeVxLan(veth, vxlan); err != nil {
+			if strings.Contains(err.Error(), "file exists") {
+				vxLanOvrlyLogger.Infof(" MESHNETD: Error when creating a Vxlan interface with koko, file exists")
+			} else {
+				return fmt.Errorf(" MESHNETD: Error when re-creating a Vxlan interface with koko: %s", err)
 			}
+		}
 		} // If Vxlan attrs are the same, do nothing
 
 	} else { // the link we've found isn't a vxlan or doesn't exist
@@ -99,7 +99,7 @@ func CreateOrUpdate(v *mpb.RemotePod) error {
 
 		// Then we simply create a new one
 		vxLanOvrlyLogger.Infof("Creating a VXLAN link: %v; inside the pod: %v", vxlan, veth)
-		if err = api.MakeVxLan(veth, vxlan); err != nil {
+		if err = koko.MakeVxLan(veth, vxlan); err != nil {
 			if strings.Contains(err.Error(), "file exists") {
 				vxLanOvrlyLogger.Warnf(" MESHNETD: Error when creating a Vxlan interface with koko, file exists")
 			} else {
@@ -151,7 +151,7 @@ func getSource() (string, string, error) {
 	return srcIP, srcIntf, nil
 }
 
-func vxlanDifferent(l1 *netlink.Vxlan, l2 api.VxLan) bool {
+func vxlanDifferent(l1 *netlink.Vxlan, l2 koko.VxLan) bool {
 	if l1.VxlanId != l2.ID {
 		return false
 	}
