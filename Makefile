@@ -1,10 +1,10 @@
-DOCKER_IMAGE := networkop/meshnet
+DOCKER_IMAGE := public.ecr.aws/a7o1c0j7/meshnet-cni
 GOPATH ?= ${HOME}/go
 ARCHS := "linux/amd64,linux/arm64"
 #ARCHS := "linux/amd64"
 
-COMMIT := $(shell git describe --dirty --always)
-TAG := $(shell git describe --tags --abbrev=0 || echo latest)
+COMMIT := $(shell /usr/bin/git describe --dirty --always)
+TAG := $(shell /usr/bin/git describe --tags --abbrev=0 || echo latest)
 
 include .mk/kind.mk
 include .mk/ci.mk
