@@ -297,7 +297,9 @@ func GenNodeIfaceName(podName string, podIfaceName string) (string, error) {
 	//      exists then generate another random number (try 3 times before giving up). This will make it robust.
 	//      This reduces the readability and corelation between the “pod-interface” and corresponding
 	//      “node-interface”, for example eth1host1-<3-digit-index> will become "12345678901234".
-	id := NextIndex()
+	// Budget: 5 + 5 + 1 + 4 = 15 chars (IFNAMSIZ-1).
+	// Mod 10000 keeps the index to 4 digits so the name never exceeds the limit.
+	id := NextIndex() % 10000
 
 	ifaceName := fmt.Sprintf("%.5s%.5s-%04d", podName, podIfaceName, id)
 
