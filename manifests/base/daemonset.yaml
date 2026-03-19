@@ -25,7 +25,7 @@ spec:
         - name: meshnet
           securityContext:
             privileged: true
-          image: networkop/meshnet:latest
+          image: public.ecr.aws/a7o1c0j7/meshnet-cni:latest
           imagePullPolicy: IfNotPresent
           command: ["./entrypoint.sh"]
           resources:
