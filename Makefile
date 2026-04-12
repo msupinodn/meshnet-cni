@@ -1,4 +1,4 @@
-DOCKER_IMAGE := public.ecr.aws/a7o1c0j7/meshnet-cni
+DOCKER_IMAGE := public.ecr.aws/drivenets/meshnet-cni
 GOPATH ?= ${HOME}/go
 ARCHS := "linux/amd64,linux/arm64"
 #ARCHS := "linux/amd64"
