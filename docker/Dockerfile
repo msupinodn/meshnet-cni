@@ -45,7 +45,7 @@ RUN GOOS=${TARGETOS} CGO_ENABLED=1 GOARCH=${TARGETARCH} go build -ldflags="-s -w
 
 
 #----------------------------------------------------- Final Container ---------------------------------
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends jq libpcap-dev && \
