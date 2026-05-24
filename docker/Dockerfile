@@ -1,5 +1,5 @@
 # GRPC generation
-FROM golang:1.25.7 AS proto_base
+FROM golang:1.25.13 AS proto_base
 
 WORKDIR /src
 
@@ -15,7 +15,7 @@ RUN buf lint && buf generate -v
 
 #---------------------------------------------- Stage 2: Build Base : Build mesnet binraries (Plugin & daemon) - ---------------------------------
 # Building the binaries
-FROM golang:1.25.7 AS build_base
+FROM golang:1.25.13 AS build_base
 
 WORKDIR /go/src/github.com/networkop/meshnet-cni
 ENV CGO_ENABLED=0
@@ -48,7 +48,7 @@ RUN GOOS=${TARGETOS} CGO_ENABLED=1 GOARCH=${TARGETARCH} go build -ldflags="-s -w
 FROM ubuntu:22.04
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends jq libpcap-dev && \
+    apt-get install -y --no-install-recommends jq libpcap0.8 && \
     rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r meshnet && useradd -r -g meshnet meshnet
