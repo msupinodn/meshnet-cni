@@ -312,6 +312,10 @@ func RecvFrmLocalPodThread(wire *GRPCWire, locIfNm string) error {
 	defaultPort := wireutil.GRPCDefaultPort
 	pktBuffSz := int32(1024 * 64 * 10) //keep buffer for MAX 10 64K frames
 
+	if err := validatePeerNodeIP(context.Background(), wire.PeerNodeIP); err != nil {
+		grpcOvrlyLogger.Errorf("[Packet Receive thread] refusing to dial peer: %v", err)
+		return err
+	}
 	url := strings.TrimSpace(fmt.Sprintf("%s:%d", wire.PeerNodeIP, defaultPort))
 	/* Utilizing google gopacket for polling for packets from the node. This seems to be the
 	   simplest way to get all packets.

@@ -47,6 +47,7 @@ func main() {
 	log.Info("Starting meshnet daemon...with grpc support")
 
 	grpcwire.SetGWireClient(m.GWireDynClient)
+	grpcwire.SetNodeClient(m.KClient)
 
 	// read grpcwire info (if any) from data store and update local db
 	err = grpcwire.ReconGWires()
