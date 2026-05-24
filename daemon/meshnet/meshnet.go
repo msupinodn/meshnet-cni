@@ -114,7 +114,11 @@ func New(cfg Config) (*Meshnet, error) {
 	mpb.RegisterLocalServer(m.s, m)
 	mpb.RegisterRemoteServer(m.s, m)
 	mpb.RegisterWireProtocolServer(m.s, m)
-	reflection.Register(m.s)
+	// Reflection leaks the service surface to anyone reaching the gRPC port.
+	// Gate it on an explicit opt-in so it stays off in production.
+	if os.Getenv("GRPC_REFLECTION") == "1" {
+		reflection.Register(m.s)
+	}
 
 	// After server is registered, reduce logging if link type is GRPC
 	if lnkTyp == wireutil.INTER_NODE_LINK_GRPC {
