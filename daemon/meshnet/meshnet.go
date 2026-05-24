@@ -37,7 +37,7 @@ type Meshnet struct {
 	mpb.UnimplementedRemoteServer
 	mpb.UnimplementedWireProtocolServer
 	config         Config
-	kClient        kubernetes.Interface
+	KClient        kubernetes.Interface
 	tClient        topologyclientv1.Interface
 	GWireDynClient *dynamic.DynamicClient
 	rCfg           *rest.Config
@@ -105,7 +105,7 @@ func New(cfg Config) (*Meshnet, error) {
 	m := &Meshnet{
 		config:         cfg,
 		rCfg:           rCfg,
-		kClient:        kClient,
+		KClient:        kClient,
 		tClient:        tClient,
 		GWireDynClient: gwireDynClient,
 		lis:            lis,

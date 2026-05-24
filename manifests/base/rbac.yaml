@@ -4,6 +4,11 @@ kind: ClusterRole
 metadata:
   name: meshnet-clusterrole
 rules:
+  # Read-only access to Node objects so the daemon can verify peer IPs
+  # received via gwirekobj / topology CRs before dialing them.
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
   - apiGroups:
     - "networkop.co.uk"
     resources:
