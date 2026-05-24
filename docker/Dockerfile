@@ -1,5 +1,5 @@
 # GRPC generation
-FROM golang:1.25.13 AS proto_base
+FROM golang:1.26.3 AS proto_base
 
 WORKDIR /src
 
@@ -15,7 +15,7 @@ RUN buf lint && buf generate -v
 
 #---------------------------------------------- Stage 2: Build Base : Build mesnet binraries (Plugin & daemon) - ---------------------------------
 # Building the binaries
-FROM golang:1.25.13 AS build_base
+FROM golang:1.26.3 AS build_base
 
 WORKDIR /go/src/github.com/networkop/meshnet-cni
 ENV CGO_ENABLED=0
