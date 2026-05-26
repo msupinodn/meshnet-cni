@@ -66,6 +66,22 @@ func (m *Meshnet) Get(ctx context.Context, pod *mpb.PodQuery) (*mpb.Pod, error) 
 	nodeIP := os.Getenv("HOST_IP")
 	nodeIntf := os.Getenv("HOST_INTF")
 
+	// Defence in depth: the CNI plugin will grpc.Dial(srcIP) to talk to the
+	// remote node's meshnet daemon for VXLAN/gRPC wire setup. srcIP comes
+	// from the topology CR's status.src_ip - a field anyone with write
+	// access to the CR (or to /status) can set. Reject IPs that are not a
+	// known cluster node address. An empty srcIp here is already the
+	// "peer pod not alive yet" sentinel the plugin handles gracefully,
+	// so we reuse it to neutralise tampered values without changing the
+	// plugin's control flow.
+	if srcIP != "" {
+		if err := grpcwire.ValidatePeerNodeIP(ctx, srcIP); err != nil {
+			mnetdLogger.Warnf("Get %s/%s: refusing to surface peer src_ip %q to plugin: %v",
+				pod.KubeNs, pod.Name, srcIP, err)
+			srcIP = ""
+		}
+	}
+
 	return &mpb.Pod{
 		Name:        pod.Name,
 		SrcIp:       srcIP,
