@@ -38,6 +38,13 @@ func SetNodeClient(c kubernetes.Interface) {
 	nodeIPCacheExpiry = time.Time{}
 }
 
+// ValidatePeerNodeIP is the exported form of validatePeerNodeIP, intended
+// for callers in other packages (e.g. the meshnet RPC handler that returns
+// peer-pod metadata to the local CNI plugin). Behaviour is identical.
+func ValidatePeerNodeIP(ctx context.Context, ip string) error {
+	return validatePeerNodeIP(ctx, ip)
+}
+
 // validatePeerNodeIP returns nil if ip matches an InternalIP or ExternalIP
 // of any node in the cluster. The result is cached for nodeIPCacheTTL.
 //
