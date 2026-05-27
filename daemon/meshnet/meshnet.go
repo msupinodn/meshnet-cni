@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
@@ -51,6 +52,37 @@ func InitLogger() {
 	mnetdLogger = log.WithFields(log.Fields{"daemon": "meshnetd"})
 }
 
+// Default client-go QPS/Burst is 5/10, which is far too low for meshnetd:
+// each pod sandbox creation triggers at least one Get of the Topology CR and
+// one SetAlive / Skip update per link, and these all flow through this one
+// REST client. On bursty workloads (e.g. a multi-node topology coming up at
+// the same time) the client-side rate limiter starts cancelling requests
+// with "client rate limiter Wait returned an error: context canceled",
+// kubelet then times out the CNI Add at 4 minutes, and pods drop into
+// FailedCreatePodSandBox loops.
+//
+// Bump the defaults to something appropriate for an in-cluster CNI control
+// plane, and let the operator override via env if needed.
+const (
+	defaultClientQPS   float32 = 50
+	defaultClientBurst int     = 100
+)
+
+func clientRateFromEnv() (qps float32, burst int) {
+	qps, burst = defaultClientQPS, defaultClientBurst
+	if v := os.Getenv("MESHNET_K8S_QPS"); v != "" {
+		if f, err := strconv.ParseFloat(v, 32); err == nil && f > 0 {
+			qps = float32(f)
+		}
+	}
+	if v := os.Getenv("MESHNET_K8S_BURST"); v != "" {
+		if b, err := strconv.Atoi(v); err == nil && b > 0 {
+			burst = b
+		}
+	}
+	return qps, burst
+}
+
 func restConfig() (*rest.Config, error) {
 	mnetdLogger.Infof("Trying in-cluster configuration")
 	rCfg, err := rest.InClusterConfig()
@@ -66,6 +98,8 @@ func restConfig() (*rest.Config, error) {
 			return nil, err
 		}
 	}
+	rCfg.QPS, rCfg.Burst = clientRateFromEnv()
+	mnetdLogger.Infof("k8s client rate-limit: QPS=%.1f Burst=%d (override via MESHNET_K8S_QPS/MESHNET_K8S_BURST)", rCfg.QPS, rCfg.Burst)
 	return rCfg, nil
 }
 
