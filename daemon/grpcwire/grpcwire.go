@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -42,11 +44,49 @@ suffix to the name.
 */
 var indexGen intfIndex
 
+// ifaceSuffixRe matches the 4-digit suffix produced by GenNodeIfaceName
+// (format: <5-char><5-char>-<4-digit>).
+var ifaceSuffixRe = regexp.MustCompile(`-(\d{4})$`)
+
 func NextIndex() int64 {
 	indexGen.mu.Lock()
 	defer indexGen.mu.Unlock()
 	indexGen.currId++
 	return indexGen.currId
+}
+
+// SeedIndexFromHost scans existing network interfaces on the host and
+// advances the counter past any indices already in use. This prevents
+// name collisions after a daemon restart when old veth interfaces from
+// a previous run still exist on the node.
+func SeedIndexFromHost() {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		log.Warnf("SeedIndexFromHost: failed to list interfaces: %v", err)
+		return
+	}
+	var maxID int64
+	for _, ifc := range ifaces {
+		m := ifaceSuffixRe.FindStringSubmatch(ifc.Name)
+		if m == nil {
+			continue
+		}
+		id, err := strconv.ParseInt(m[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		if id > maxID {
+			maxID = id
+		}
+	}
+	if maxID > 0 {
+		indexGen.mu.Lock()
+		if maxID > indexGen.currId {
+			indexGen.currId = maxID
+		}
+		indexGen.mu.Unlock()
+		log.Infof("SeedIndexFromHost: seeded interface counter to %d from existing host interfaces", maxID)
+	}
 }
 
 /*+++tbf: These constants has no utility other that helping in debugging. These can be removed later. */
