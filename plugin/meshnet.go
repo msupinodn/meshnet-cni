@@ -126,11 +126,12 @@ func getVxlanSource(nodeIP string, nodeIntf string) (string, string, error) {
 
 // -------------------------------------------------------------------------------------------------
 // makeVeth creates koko.Veth from NetNS and LinkName
-func makeVeth(netNS, linkName string, ip string) (*koko.VEth, error) {
-	log.Infof("Creating Veth struct with NetNS:%s and intfName: %s, IP:%s", netNS, linkName, ip)
+func makeVeth(netNS, linkName string, ip string, mtu int) (*koko.VEth, error) {
+	log.Infof("Creating Veth struct with NetNS:%s and intfName: %s, IP:%s, MTU:%d", netNS, linkName, ip, mtu)
 	veth := koko.VEth{}
 	veth.NsName = netNS
 	veth.LinkName = linkName
+	veth.MTU = mtu
 	if ip != "" {
 		ipAddr, ipSubnet, err := net.ParseCIDR(ip)
 		if err != nil {
@@ -146,11 +147,12 @@ func makeVeth(netNS, linkName string, ip string) (*koko.VEth, error) {
 
 // -------------------------------------------------------------------------------------------------
 // Creates koko.Vxlan from ParentIF, destination IP and VNI
-func makeVxlan(srcIntf string, peerIP string, idx int64) *koko.VxLan {
+func makeVxlan(srcIntf string, peerIP string, idx int64, mtu int) *koko.VxLan {
 	return &koko.VxLan{
 		ParentIF: srcIntf,
 		IPAddr:   net.ParseIP(peerIP),
 		ID:       int(vxlanBase + idx),
+		MTU:      mtu,
 	}
 }
 
@@ -215,7 +217,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	log.Infof("Add[%s]: Starting to traverse all links", string(cniArgs.K8S_POD_NAME))
 	for _, link := range localPod.Links { // Iterate over each link of the local pod
 		// Build koko's veth struct for local intf
-		myVeth, err := makeVeth(args.Netns, link.LocalIntf, link.LocalIp)
+		myVeth, err := makeVeth(args.Netns, link.LocalIntf, link.LocalIp, int(link.Mtu))
 		if err != nil {
 			return err
 		}
@@ -254,7 +256,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 			if peerPod.SrcIp == localPod.SrcIp { // This means we're on the same host
 				log.Infof("Add[%s]: %s and %s are on the same host", string(cniArgs.K8S_POD_NAME), localPod.Name, peerPod.Name)
 				// Creating koko's Veth struct for peer intf
-				peerVeth, err := makeVeth(peerPod.NetNs, link.PeerIntf, link.PeerIp)
+				peerVeth, err := makeVeth(peerPod.NetNs, link.PeerIntf, link.PeerIp, int(link.Mtu))
 				if err != nil {
 					log.Errorf("Add[%s]: Failed to build koko Veth struct", string(cniArgs.K8S_POD_NAME))
 					return err
@@ -341,7 +343,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 					continue
 				}
 				// Creating koko's Vxlan struct
-				vxlan := makeVxlan(srcIntf, peerPod.SrcIp, link.Uid)
+				vxlan := makeVxlan(srcIntf, peerPod.SrcIp, link.Uid, int(link.Mtu))
 				// Checking if interface already exists
 				iExist, _ := koko.IsExistLinkInNS(myVeth.NsName, myVeth.LinkName)
 				if iExist { // If VXLAN intf exists, we need to remove it first
@@ -365,6 +367,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 					Vni:      link.Uid + vxlanBase,
 					KubeNs:   string(cniArgs.K8S_POD_NAMESPACE),
 					NodeIntf: srcIntf,
+					Mtu:      link.Mtu,
 				}
 
 				url := fmt.Sprintf("%s:%d", peerPod.SrcIp, wireutil.GRPCDefaultPort)
@@ -499,7 +502,7 @@ func cmdDel(args *skel.CmdArgs) error {
 			}
 		}
 		// Creating koko's Veth struct for local intf
-		myVeth, err := makeVeth(args.Netns, link.LocalIntf, link.LocalIp)
+		myVeth, err := makeVeth(args.Netns, link.LocalIntf, link.LocalIp, int(link.Mtu))
 		if err != nil {
 			log.Infof("Del: Failed to construct koko Veth struct")
 			return err

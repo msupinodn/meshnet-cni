@@ -102,6 +102,7 @@ func CreateUpdateGRPCWireRemoteTriggered(wireDef *mpb.WireDef, stopC chan struct
 	inContainerVeth := koko.VEth{
 		NsName:   wireDef.LocalPodNetNs,
 		LinkName: inIfNm,
+		MTU:      int(wireDef.Mtu),
 	}
 
 	if wireDef.LocalPodIp != "" {
