@@ -160,6 +160,9 @@ spec:
                     peer_pod:
                       description: Name of the peer pod
                       type: string
+                    mtu:
+                      description: (Optional) MTU for the link interface
+                      type: integer
                     uid:
                       description: Unique identified of a p2p link
                       type: integer
