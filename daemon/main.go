@@ -37,6 +37,8 @@ func main() {
 	grpcwire.InitLogger()
 	vxlan.InitLogger()
 
+	grpcwire.SeedIndexFromHost()
+
 	m, err := meshnet.New(meshnet.Config{
 		Port: grpcPort,
 	})

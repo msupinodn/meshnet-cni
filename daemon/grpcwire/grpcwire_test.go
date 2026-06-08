@@ -1,6 +1,7 @@
 package grpcwire
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -67,5 +68,72 @@ func TestGenNodeIfaceName_WrapAround(t *testing.T) {
 	if len(name1) > maxIfnamsiz || len(name2) > maxIfnamsiz {
 		t.Errorf("names exceed IFNAMSIZ: %q (%d), %q (%d)",
 			name1, len(name1), name2, len(name2))
+	}
+}
+
+func TestSeedIndexFromHost(t *testing.T) {
+	// SeedIndexFromHost reads real host interfaces. After calling it the
+	// counter must be at least as high as any -NNNN suffix found on the
+	// host. We can't control which interfaces exist, but we can verify
+	// the function doesn't panic and that subsequent names are unique
+	// and within IFNAMSIZ.
+	indexGen.mu.Lock()
+	indexGen.currId = 0
+	indexGen.mu.Unlock()
+
+	SeedIndexFromHost()
+
+	indexGen.mu.Lock()
+	seeded := indexGen.currId
+	indexGen.mu.Unlock()
+
+	// Generate two names and confirm they don't collide and are valid.
+	name1, err := GenNodeIfaceName("seedt", "eth0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	name2, err := GenNodeIfaceName("seedt", "eth0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if name1 == name2 {
+		t.Errorf("names should differ after seed, both got %q (seeded at %d)", name1, seeded)
+	}
+	if len(name1) > maxIfnamsiz || len(name2) > maxIfnamsiz {
+		t.Errorf("names exceed IFNAMSIZ: %q (%d), %q (%d)",
+			name1, len(name1), name2, len(name2))
+	}
+}
+
+func TestIfaceSuffixRe(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantID  int64
+		wantHit bool
+	}{
+		{"meshnet iface", "pod1beth1-0042", 42, true},
+		{"high index", "abcdefghij-9999", 9999, true},
+		{"no suffix", "eth0", 0, false},
+		{"short suffix", "foo-01", 0, false},
+		{"loopback", "lo", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := ifaceSuffixRe.FindStringSubmatch(tt.input)
+			if tt.wantHit {
+				if m == nil {
+					t.Fatalf("expected match for %q", tt.input)
+				}
+				// m[1] is the 4-digit group
+				if m[1] != fmt.Sprintf("%04d", tt.wantID) {
+					t.Errorf("got suffix %q, want %04d", m[1], tt.wantID)
+				}
+			} else {
+				if m != nil {
+					t.Errorf("expected no match for %q, got %v", tt.input, m)
+				}
+			}
+		})
 	}
 }
