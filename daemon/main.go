@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"strconv"
@@ -57,6 +58,12 @@ func main() {
 		log.Errorf("could not reconcile grpc wire: %v", err)
 		// generate error and continue
 	}
+
+	// The CNI conflist is installed (cni.Init above) and the gRPC listener is
+	// bound, so this node is ready to wire pods: clear the readiness taint that
+	// kept workload pods off the node until now. Run in the background so
+	// transient API errors don't delay serving.
+	go m.RemoveReadinessTaint(context.Background())
 
 	if err := m.Serve(); err != nil {
 		log.Errorf("daemon exited badly: %v", err)

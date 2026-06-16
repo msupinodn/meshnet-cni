@@ -227,7 +227,7 @@ metadata:
 rules:
 - apiGroups: [""]
   resources: ["nodes"]
-  verbs: ["get", "list", "watch"]
+  verbs: ["get", "list", "watch", "patch", "update"]
 - apiGroups:
   - networkop.co.uk
   resources:
@@ -344,6 +344,9 @@ spec:
       serviceAccountName: meshnet
       terminationGracePeriodSeconds: 30
       tolerations:
+      - effect: NoSchedule
+        key: meshnet.networkop.co.uk/agent-not-ready
+        operator: Exists
       - effect: NoSchedule
         operator: Exists
       volumes:

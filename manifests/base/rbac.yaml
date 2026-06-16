@@ -4,11 +4,13 @@ kind: ClusterRole
 metadata:
   name: meshnet-clusterrole
 rules:
-  # Read-only access to Node objects so the daemon can verify peer IPs
-  # received via gwirekobj / topology CRs before dialing them.
+  # Read access to Node objects so the daemon can verify peer IPs received via
+  # gwirekobj / topology CRs before dialing them, plus patch/update so the
+  # daemon can clear its own node's readiness taint once the CNI conflist is
+  # installed (see RemoveReadinessTaint in daemon/meshnet/taint.go).
   - apiGroups: [""]
     resources: ["nodes"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups:
     - "networkop.co.uk"
     resources:
