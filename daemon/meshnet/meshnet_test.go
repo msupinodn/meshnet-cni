@@ -2,6 +2,9 @@ package meshnet
 
 import (
 	"context"
+	"net"
+	"os"
+	"path/filepath"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -100,5 +103,50 @@ func TestRemoveNodeTaint(t *testing.T) {
 	// Idempotent: a second call on a node without the taint must succeed.
 	if err := removeNodeTaint(context.Background(), client, "node-1", defaultReadinessTaintKey); err != nil {
 		t.Fatalf("removeNodeTaint (idempotent) returned error: %v", err)
+	}
+}
+
+func TestConflistPresent(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "00-meshnet.conflist")
+	if conflistPresent(missing) {
+		t.Fatalf("expected absent conflist to report not present")
+	}
+
+	empty := filepath.Join(dir, "empty.conflist")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatalf("write empty: %v", err)
+	}
+	if conflistPresent(empty) {
+		t.Fatalf("expected empty conflist to report not present")
+	}
+
+	if conflistPresent(dir) {
+		t.Fatalf("expected directory to report not present")
+	}
+
+	good := filepath.Join(dir, "good.conflist")
+	if err := os.WriteFile(good, []byte(`{"plugins":[]}`), 0o644); err != nil {
+		t.Fatalf("write good: %v", err)
+	}
+	if !conflistPresent(good) {
+		t.Fatalf("expected non-empty conflist to report present")
+	}
+}
+
+func TestGRPCServing(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer lis.Close()
+	port := lis.Addr().(*net.TCPAddr).Port
+	if !grpcServing(port) {
+		t.Fatalf("expected open listener port %d to report serving", port)
+	}
+
+	lis.Close()
+	if grpcServing(port) {
+		t.Fatalf("expected closed listener port %d to report not serving", port)
 	}
 }

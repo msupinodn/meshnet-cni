@@ -2,7 +2,9 @@ package meshnet
 
 import (
 	"context"
+	"net"
 	"os"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -22,6 +24,82 @@ const (
 	taintRemovalRetries  = 12
 	taintRemovalInterval = 5 * time.Second
 )
+
+const (
+	// readinessPollInterval is how often the readiness gate re-checks the CNI
+	// conflist and local gRPC endpoint before clearing the taint.
+	readinessPollInterval = 2 * time.Second
+	// readinessPollTimeout bounds how long the gate waits for meshnet CNI to
+	// become ready. If it elapses the taint is left in place so workload pods
+	// keep off a node that cannot yet wire them.
+	readinessPollTimeout = 5 * time.Minute
+	// servingDialTimeout bounds a single dial of the local gRPC endpoint.
+	servingDialTimeout = 2 * time.Second
+)
+
+// RemoveReadinessTaintWhenReady waits until meshnet's CNI conflist is present on
+// disk AND the local gRPC endpoint is accepting connections, then removes the
+// node readiness taint. This ordering matters: removing the taint before the
+// conflist is installed lets workload pods schedule onto a node whose sandboxes
+// come up with the base CNI only (eth0, no meshnet wiring) — the new-node wiring
+// race this gates against. Intended to run in a background goroutine.
+func (m *Meshnet) RemoveReadinessTaintWhenReady(ctx context.Context, conflistPath string, grpcPort int) {
+	if !m.waitForCNIReady(ctx, conflistPath, grpcPort) {
+		mnetdLogger.Errorf("meshnet CNI not ready within %s; leaving readiness taint %q in place on node %q",
+			readinessPollTimeout, readinessTaintKey(), localNodeName())
+		return
+	}
+	mnetdLogger.Infof("conflist present + serving, removing taint (conflist=%q grpc=:%d)", conflistPath, grpcPort)
+	m.RemoveReadinessTaint(ctx)
+}
+
+// waitForCNIReady polls until both the conflist file exists (non-empty) and the
+// local gRPC port accepts a connection, or the bounded timeout/ctx elapses.
+// Returns true only when both conditions are met.
+func (m *Meshnet) waitForCNIReady(ctx context.Context, conflistPath string, grpcPort int) bool {
+	deadline := time.Now().Add(readinessPollTimeout)
+	announced := false
+	for {
+		conflistReady := conflistPresent(conflistPath)
+		servingReady := conflistReady && grpcServing(grpcPort)
+		if conflistReady && servingReady {
+			return true
+		}
+		if !announced {
+			mnetdLogger.Infof("waiting for %q before clearing readiness taint (conflist_present=%t grpc_serving=%t)",
+				conflistPath, conflistReady, servingReady)
+			announced = true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(readinessPollInterval):
+		}
+	}
+}
+
+// conflistPresent reports whether the meshnet CNI conflist exists on disk as a
+// non-empty regular file.
+func conflistPresent(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir() && info.Size() > 0
+}
+
+// grpcServing reports whether the local gRPC endpoint accepts a TCP connection.
+func grpcServing(port int) bool {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), servingDialTimeout)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
 
 // readinessTaintKey returns the taint key meshnetd clears on its own node,
 // overridable via MESHNET_READINESS_TAINT_KEY.

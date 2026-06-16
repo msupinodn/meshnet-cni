@@ -59,11 +59,14 @@ func main() {
 		// generate error and continue
 	}
 
-	// The CNI conflist is installed (cni.Init above) and the gRPC listener is
-	// bound, so this node is ready to wire pods: clear the readiness taint that
-	// kept workload pods off the node until now. Run in the background so
-	// transient API errors don't delay serving.
-	go m.RemoveReadinessTaint(context.Background())
+	// Clear the readiness taint that kept workload pods off this node, but only
+	// once meshnet CNI can actually wire pods: the conflist must be present on
+	// disk AND the gRPC endpoint must be serving. cni.Init wrote the conflist
+	// above, but a crash before steady-state serving can leave it removed (see
+	// cni.Cleanup), so the gate polls both conditions rather than assuming the
+	// synchronous Init above is sufficient. Runs in the background so the gate's
+	// bounded wait doesn't delay Serve.
+	go m.RemoveReadinessTaintWhenReady(context.Background(), cni.ConflistPath(), grpcPort)
 
 	if err := m.Serve(); err != nil {
 		log.Errorf("daemon exited badly: %v", err)

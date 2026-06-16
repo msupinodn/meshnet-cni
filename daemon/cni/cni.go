@@ -23,6 +23,14 @@ const (
 
 var meshnetCNIPath = filepath.Join(defaultNetDir, defaultCNIFile)
 
+// ConflistPath returns the on-disk path of the meshnet CNI conflist written by
+// Init (e.g. /etc/cni/net.d/00-meshnet.conflist). The daemon readiness gate
+// polls this path to confirm meshnet CNI is installed before clearing the node
+// readiness taint.
+func ConflistPath() string {
+	return meshnetCNIPath
+}
+
 // This is borrowed from https://tinyurl.com/khjhf9xd
 func loadConfList() (map[string]interface{}, error) {
 	files, err := libcni.ConfFiles(defaultNetDir, []string{".conf", ".conflist", ".json"})
