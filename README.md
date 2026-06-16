@@ -224,6 +224,38 @@ Meshnet will convert the above to conflist and produce the file `/etc/cni/net.d/
 }
 ```
 
+### Node-readiness taint gate
+
+On a freshly added (e.g. autoscaled) node there is a window between the node
+becoming `Ready` and meshnet writing its CNI config (`/etc/cni/net.d/00-meshnet.conflist`).
+Workload pod sandboxes created during that window are wired by the base CNI
+only (e.g. `eth0`), and the meshnet plugin is never chained in for them, so they
+come up permanently unwired. The CNI-side readiness retry cannot help here
+because the meshnet plugin isn't installed yet.
+
+To close this race, meshnetd removes a readiness taint from its own node once
+the CNI conflist is installed and the daemon is serving (see
+`RemoveReadinessTaint` in `daemon/meshnet/taint.go`). The removal is idempotent
+and tolerant of transient API errors. The taint key defaults to
+`meshnet.networkop.co.uk/agent-not-ready` (effect `NoSchedule`) and is
+configurable via the `MESHNET_READINESS_TAINT_KEY` env var. The meshnet
+DaemonSet tolerates this taint so it can still run on a not-yet-ready node, and
+its ServiceAccount is granted `get;list;patch;update` on `nodes`.
+
+For the gate to actually hold pods off a new node, **the node pool must register
+new nodes with this taint** so it exists from node join until meshnet clears it.
+The daemon-removes-taint half is necessary but not sufficient on its own.
+
+```sh
+# AKS node pool (apply to the pool that runs the workload):
+az aks nodepool update \
+  --resource-group <rg> --cluster-name <cluster> --name <pool> \
+  --node-taints meshnet.networkop.co.uk/agent-not-ready=true:NoSchedule
+
+# or via kubelet on node registration:
+#   --register-with-taints=meshnet.networkop.co.uk/agent-not-ready=true:NoSchedule
+```
+
 ### Customising installation paths
 
 In some cases, Kubernetes distros may store CNI configuration files and binaries in non-standard directories and override them with `--cni-bin-dir` and `--cni-conf-dir` flags. In order to install meshnet into the right directories, create a new overlay under `manifests/overlays` and patch the `cni-dir` or `cni-bin` volumes with the correct location. See [kops overlay](manifests/overlays/kops) for an example.

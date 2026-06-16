@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"strconv"
@@ -57,6 +58,15 @@ func main() {
 		log.Errorf("could not reconcile grpc wire: %v", err)
 		// generate error and continue
 	}
+
+	// Clear the readiness taint that kept workload pods off this node, but only
+	// once meshnet CNI can actually wire pods: the conflist must be present on
+	// disk AND the gRPC endpoint must be serving. cni.Init wrote the conflist
+	// above, but a crash before steady-state serving can leave it removed (see
+	// cni.Cleanup), so the gate polls both conditions rather than assuming the
+	// synchronous Init above is sufficient. Runs in the background so the gate's
+	// bounded wait doesn't delay Serve.
+	go m.RemoveReadinessTaintWhenReady(context.Background(), cni.ConflistPath(), grpcPort)
 
 	if err := m.Serve(); err != nil {
 		log.Errorf("daemon exited badly: %v", err)

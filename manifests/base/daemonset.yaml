@@ -19,6 +19,13 @@ spec:
       nodeSelector:
         beta.kubernetes.io/arch: amd64
       tolerations:
+        # Keep meshnet itself schedulable on a brand-new, not-yet-ready node so
+        # it can install its CNI config and then clear the taint below. Nodes
+        # must be registered with this taint (see README "Node-readiness taint
+        # gate"); the blanket NoSchedule toleration that follows also covers it.
+        - key: meshnet.networkop.co.uk/agent-not-ready
+          operator: Exists
+          effect: NoSchedule
         - operator: Exists
           effect: NoSchedule
       containers:
