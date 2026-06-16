@@ -9,6 +9,9 @@ import (
 	"github.com/networkop/meshnet-cni/daemon/vxlan"
 
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,8 +36,16 @@ func (m *Meshnet) Get(ctx context.Context, pod *mpb.PodQuery) (*mpb.Pod, error) 
 
 	result, err := m.getPod(ctx, pod.Name, pod.KubeNs)
 	if err != nil {
-		mnetdLogger.Errorf("Failed to read pod %s from K8s", pod.Name)
-		return nil, err
+		// Distinguish "this pod genuinely has no Topology CR" from a
+		// transient/lookup failure. The CNI plugin keys off the gRPC status
+		// code: NotFound means "not a topology pod, proceed", anything else
+		// means "retry, do NOT let the pod come up partially wired".
+		if apierrors.IsNotFound(err) {
+			mnetdLogger.Infof("Pod %s/%s has no Topology CR, not a meshnet pod", pod.KubeNs, pod.Name)
+			return nil, status.Errorf(codes.NotFound, "pod %s/%s is not a topology pod: %v", pod.KubeNs, pod.Name, err)
+		}
+		mnetdLogger.Errorf("Failed to read pod %s from K8s: %v", pod.Name, err)
+		return nil, status.Errorf(codes.Unavailable, "failed to read topology for pod %s/%s: %v", pod.KubeNs, pod.Name, err)
 	}
 
 	remoteLinks, found, err := unstructured.NestedSlice(result.Object, "spec", "links")

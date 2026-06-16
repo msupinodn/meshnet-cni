@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -17,7 +18,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	mpb "github.com/networkop/meshnet-cni/daemon/proto/meshnet/v1beta1"
 	"github.com/networkop/meshnet-cni/utils/wireutil"
@@ -27,6 +30,17 @@ const (
 	vxlanBase   = 5000
 	localhost   = "localhost"
 	macvlanMode = netlink.MACVLAN_MODE_BRIDGE
+)
+
+// On a freshly added node (e.g. cluster-autoscaler scale-up) the meshnet CNI
+// conf/binary is installed by meshnetd before its gRPC server starts serving.
+// Pods scheduled during that window would otherwise race ahead and come up
+// partially wired (AR-65093). Wait for the local daemon to become reachable
+// before wiring, bounded well under kubelet's CNI timeout. These are vars (not
+// consts) so tests can shrink them.
+var (
+	localDaemonReadyTimeout  = 60 * time.Second
+	localDaemonRetryInterval = 2 * time.Second
 )
 
 var (
@@ -156,6 +170,36 @@ func makeVxlan(srcIntf string, peerIP string, idx int64, mtu int) *koko.VxLan {
 	}
 }
 
+// getLocalPodWithRetry fetches the local pod's topology from the local meshnet
+// daemon, retrying while the daemon is unreachable/not-ready. It returns
+// immediately on success or on a NotFound (the pod is not a topology pod, which
+// is an authoritative answer from the daemon). For any other error it retries
+// with a fixed backoff up to localDaemonReadyTimeout and then returns the last
+// error, so the caller can fail the CNI ADD and let the kubelet retry rather
+// than letting the pod come up partially/never wired.
+func getLocalPodWithRetry(ctx context.Context, c mpb.LocalClient, name, ns string) (*mpb.Pod, error) {
+	deadline := time.Now().Add(localDaemonReadyTimeout)
+	for attempt := 1; ; attempt++ {
+		pod, err := c.Get(ctx, &mpb.PodQuery{Name: name, KubeNs: ns})
+		if err == nil {
+			return pod, nil
+		}
+		// NotFound is a definitive answer from a ready daemon: not a topology pod.
+		if status.Code(err) == codes.NotFound {
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("local meshnet daemon not ready after %s (last error: %w)", localDaemonReadyTimeout, err)
+		}
+		log.Warnf("Add[%s]: local meshnet daemon not ready yet (attempt %d): %v; retrying in %s", name, attempt, err, localDaemonRetryInterval)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(localDaemonRetryInterval):
+		}
+	}
+}
+
 // -------------------------------------------------------------------------------------------------
 // Adds interfaces to a POD. the POD name and the POD Namespace is passed as arguments.
 func cmdAdd(args *skel.CmdArgs) error {
@@ -187,13 +231,19 @@ func cmdAdd(args *skel.CmdArgs) error {
 	meshnetClient := mpb.NewLocalClient(conn)
 
 	log.Infof("Add[%s]: Retrieving local pod information from meshnet daemon", string(cniArgs.K8S_POD_NAME))
-	localPod, err := meshnetClient.Get(ctx, &mpb.PodQuery{
-		Name:   string(cniArgs.K8S_POD_NAME),
-		KubeNs: string(cniArgs.K8S_POD_NAMESPACE),
-	})
+	localPod, err := getLocalPodWithRetry(ctx, meshnetClient, string(cniArgs.K8S_POD_NAME), string(cniArgs.K8S_POD_NAMESPACE))
 	if err != nil {
-		log.Errorf("Add: Pod %s:%s was not a topology pod returning", string(cniArgs.K8S_POD_NAMESPACE), string(cniArgs.K8S_POD_NAME))
-		return types.PrintResult(result, n.CNIVersion)
+		if status.Code(err) == codes.NotFound {
+			// Daemon answered: this pod genuinely has no Topology CR, so it's
+			// not a meshnet pod. Let it proceed with the chained result.
+			log.Infof("Add: Pod %s:%s was not a topology pod, returning", string(cniArgs.K8S_POD_NAMESPACE), string(cniArgs.K8S_POD_NAME))
+			return types.PrintResult(result, n.CNIVersion)
+		}
+		// The local meshnet daemon never became ready (or kept erroring). Fail
+		// the CNI ADD so the kubelet retries it, instead of returning success
+		// for a pod whose meshnet links were never wired (AR-65093 race).
+		log.Errorf("Add[%s]: local meshnet daemon not ready, failing ADD so kubelet retries: %v", string(cniArgs.K8S_POD_NAME), err)
+		return err
 	}
 
 	// Finding the source IP and interface for VXLAN VTEP
