@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
@@ -15,11 +16,20 @@ import (
 )
 
 const (
-	defaultNetDir     = "/etc/cni/net.d"
 	defaultCNIFile    = "00-meshnet.conflist"
 	interNodeLinkConf = "/etc/cni/net.d/meshnet-inter-node-link-type"
 	defaultPluginName = "meshnet"
+
+	// DefaultWaitTimeout bounds how long WaitForNetConfig blocks waiting for the
+	// node's base CNI conflist to appear before giving up and treating it as a
+	// genuine misconfiguration.
+	DefaultWaitTimeout = 3 * time.Minute
+	// DefaultWaitInterval is the poll interval used by WaitForNetConfig.
+	DefaultWaitInterval = 2 * time.Second
 )
+
+// defaultNetDir is a var (not a const) so unit tests can point it at a temp dir.
+var defaultNetDir = "/etc/cni/net.d"
 
 var meshnetCNIPath = filepath.Join(defaultNetDir, defaultCNIFile)
 
@@ -113,6 +123,33 @@ func removeInterNodeLinkConf() error {
 		return fmt.Errorf("failed to remove %s: %v", interNodeLinkConf, err)
 	}
 	return nil
+}
+
+// WaitForNetConfig blocks until at least one valid base (non-meshnet) CNI
+// network config is present in defaultNetDir, or timeout elapses.
+//
+// On a freshly-joined node meshnetd can start before the node's base CNI
+// conflist (e.g. the Azure swift-overlay conflist that meshnet chains onto) is
+// written to /etc/cni/net.d. Without this wait, Init fails immediately with
+// "no net configurations found" and the container exits(1), causing k8s to
+// crash-loop the pod until the base conf appears. Polling instead keeps the
+// daemon alive across that startup race. If the timeout is hit the base config
+// is genuinely missing, so the caller should treat the returned error as fatal.
+func WaitForNetConfig(timeout, interval time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	announced := false
+	for {
+		if _, err := loadConfList(); err == nil {
+			log.Infof("base CNI config present in %s, initializing", defaultNetDir)
+			return nil
+		} else if time.Now().After(deadline) {
+			return fmt.Errorf("timed out after %s waiting for base CNI config in %s: %v", timeout, defaultNetDir, err)
+		} else if !announced {
+			log.Infof("waiting for base CNI config in %s (polling every %s, timeout %s) ...", defaultNetDir, interval, timeout)
+			announced = true
+		}
+		time.Sleep(interval)
+	}
 }
 
 // Init installs meshnet CNI configuration
