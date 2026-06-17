@@ -210,6 +210,59 @@ func ReconGWires() error {
 }
 
 // -----------------------------------------------------------------------------------------------------------
+// IsWireRecordedInDataStore reports whether a successfully-established grpc wire
+// for the given pod network namespace and link UID is recorded in the k8s
+// data-store (GWireKObj) for THIS node.
+//
+// A data-store entry is written only after a wire's veth pair has been fully
+// created (see AddWireInMemNDataStore -> K8sStoreGWire), and it is the source of
+// truth that ReconGWires replays into local memory after a daemon restart.
+// Therefore:
+//   - present  => the wire was legitimately established here (it is live, or it
+//     survived a restart and recon will re-adopt it); its in-pod interface must
+//     NOT be torn down.
+//   - absent   => no wire was ever established here for this exact pod incarnation,
+//     so any interface left in the pod under this link's name is a stale remnant
+//     of a prior failed/partial ADD.
+//
+// The match is keyed on both the link UID and the pod netns so that a stale
+// record from a previous pod incarnation (same link UID, different netns) is not
+// mistaken for the current one.
+func IsWireRecordedInDataStore(ctx context.Context, podNetNs string, linkUID int64) (bool, error) {
+	if gWClient.di == nil {
+		return false, fmt.Errorf("IsWireRecordedInDataStore: gwire data-store client not initialised")
+	}
+	nodeName, err := findNodeName()
+	if err != nil {
+		return false, err
+	}
+	kObjList, err := gWClient.GetWireObjListUS(ctx, nodeName)
+	if err != nil {
+		return false, err
+	}
+	for _, node := range kObjList.Items {
+		items, found, err := unstructured.NestedSlice(node.Object, kStatus, kGrpcWireItems)
+		if err != nil || !found || items == nil {
+			continue
+		}
+		for _, item := range items {
+			itemMap, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			ws := grpcwirev1.GWireStatus{}
+			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(itemMap, &ws); err != nil {
+				continue
+			}
+			if ws.LinkId == linkUID && ws.LocalPodNetNs == podNetNs {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// -----------------------------------------------------------------------------------------------------------
 // updateGRPCWireStatus writes grpc wire 'wStatus' into k8s data-store. 'wStatus' for all existing grpc wires are added
 // under 'grpcWireItems' as part of status. Status is part of 'GWireKObj' and identified
 // by name=<current-node-name>. For the first write, this object for a node does not exist in k8s data-

@@ -12,6 +12,7 @@ import (
 	mpb "github.com/networkop/meshnet-cni/daemon/proto/meshnet/v1beta1"
 	"github.com/networkop/meshnet-cni/utils/wireutil"
 	koko "github.com/networkop/meshnet-cni/internal/koko"
+	"github.com/vishvananda/netlink"
 )
 
 func CreateGRPCWireLocal(ctx context.Context, wireDef *mpb.WireDef) (*mpb.BoolResponse, error) {
@@ -117,6 +118,19 @@ func CreateUpdateGRPCWireRemoteTriggered(wireDef *mpb.WireDef, stopC chan struct
 		}}
 	}
 
+	// AR-65093 GAP-3b: remote-end veth creation renames a fresh koko* link to the
+	// in-pod interface name (e.g. eno3). If a stale remnant from an earlier
+	// PARTIAL/failed ADD is still present in the pod netns, the rename fails with
+	// EEXIST and every CNI ADD retry re-collides forever, permanently wedging the
+	// pod's wiring (the n36 case). Make the create idempotent, but fail-closed:
+	// only remove an interface we can positively classify as a stale remnant of a
+	// wire that was never successfully established here; never touch a live,
+	// correctly-wired peer interface.
+	if err := ensureNoStaleRemoteEnd(inContainerVeth, wireDef); err != nil {
+		grpcOvrlyLogger.Errorf("[ADD-WIRE:REMOTE-END] %v", err)
+		return nil, err
+	}
+
 	if err = koko.MakeVeth(inContainerVeth, hostEndVeth); err != nil {
 		grpcOvrlyLogger.Errorf("[ADD-WIRE:REMOTE-END] Error creating vEth pair (in:%s <--> out:%s).  Error-> %s", inIfNm, outIfNm, err)
 		return nil, err
@@ -152,6 +166,111 @@ func CreateUpdateGRPCWireRemoteTriggered(wireDef *mpb.WireDef, stopC chan struct
 	AddWireInMemNDataStore(aWire, wrHandle)
 
 	return aWire, nil
+}
+
+// ensureNoStaleRemoteEnd makes remote-end veth creation idempotent and safe.
+//
+// If the in-pod interface name is not yet taken it is a no-op and the caller
+// proceeds with a normal create. If the name is already taken it classifies the
+// existing interface, using existing wire bookkeeping, as either:
+//
+//   - LIVE / established (left untouched, returns an error so the caller does not
+//     recreate over it), or
+//   - a STALE remnant of this wire's prior failed ADD (removed, returns nil so the
+//     caller can recreate the wire cleanly).
+//
+// Classification is deliberately conservative (fail-safe): unless the interface
+// is positively identified as a stale remnant - no live in-memory wire, no
+// data-store record for this exact pod incarnation, and the link is actually a
+// veth we created - it is NOT deleted. Losing one pod's wiring to a conservative
+// no-delete is far preferable to tearing down a healthy peer interface.
+func ensureNoStaleRemoteEnd(inPod koko.VEth, wireDef *mpb.WireDef) error {
+	exists, isVeth, err := inPodLinkInfo(inPod.NsName, inPod.LinkName)
+	if err != nil {
+		// Could not inspect the pod netns (e.g. not ready yet). Do not block and
+		// never delete here; let koko.MakeVeth run and surface any real error.
+		grpcOvrlyLogger.Infof("[ADD-WIRE:REMOTE-END] could not inspect in-pod iface %s in netns %s for link %d (%v); proceeding without stale cleanup",
+			inPod.LinkName, inPod.NsName, wireDef.LinkUid, err)
+		return nil
+	}
+	if !exists {
+		// Nothing in the way - normal create.
+		return nil
+	}
+
+	// The in-pod interface name is already taken.
+
+	// (1) Concurrent/duplicate trigger: if this exact wire is already tracked in
+	// memory it is live - never delete. (The caller also checks this earlier; this
+	// re-check closes the gap with a racing trigger.)
+	if _, ok := GetWireByUID(wireDef.LocalPodNetNs, int(wireDef.LinkUid)); ok {
+		return fmt.Errorf("in-pod iface %s for link %d already exists and is a live tracked wire; not recreating (fail-safe)",
+			inPod.LinkName, wireDef.LinkUid)
+	}
+
+	// (2) Not in memory: consult the data-store, the source of truth that recon
+	// replays after a restart. A record for this exact pod netns + link means a
+	// veth pair was successfully established here before; treat as live (recon
+	// will re-adopt it) and do not delete.
+	recorded, err := IsWireRecordedInDataStore(context.Background(), wireDef.LocalPodNetNs, wireDef.LinkUid)
+	if err != nil {
+		return fmt.Errorf("in-pod iface %s for link %d already exists and stale-vs-live could not be determined (%v); not deleting (fail-safe)",
+			inPod.LinkName, wireDef.LinkUid, err)
+	}
+	if recorded {
+		return fmt.Errorf("in-pod iface %s for link %d already exists and is recorded as an established wire; not recreating (fail-safe)",
+			inPod.LinkName, wireDef.LinkUid)
+	}
+
+	// (3) No live in-memory wire and no data-store record for this pod incarnation.
+	// The name is taken but the link is not a veth we created: do not delete an
+	// unrelated interface.
+	if !isVeth {
+		return fmt.Errorf("in-pod iface %s for link %d already exists but is not a veth; not deleting (fail-safe)",
+			inPod.LinkName, wireDef.LinkUid)
+	}
+
+	// Positively classified as a stale remnant of a prior failed ADD. Remove it
+	// (this also tears down its half-created host-side peer via veth pair
+	// deletion) so the caller can recreate the wire cleanly.
+	grpcOvrlyLogger.Infof("[ADD-WIRE:REMOTE-END] removing stale remnant veth %s in pod netns %s for link %d (no live wire, no data-store record) to allow idempotent recreate",
+		inPod.LinkName, wireDef.LocalPodNetNs, wireDef.LinkUid)
+	stale := koko.VEth{NsName: inPod.NsName, LinkName: inPod.LinkName}
+	if err := stale.RemoveVethLink(); err != nil {
+		return fmt.Errorf("failed to remove stale remnant veth %s in pod netns %s for link %d: %w",
+			inPod.LinkName, wireDef.LocalPodNetNs, wireDef.LinkUid, err)
+	}
+	return nil
+}
+
+// inPodLinkInfo inspects an interface inside the given network namespace and
+// reports whether it exists and whether it is a veth. A missing interface is
+// reported as (false, false, nil); only genuine namespace access failures are
+// returned as an error.
+func inPodLinkInfo(nsName, linkName string) (exists bool, isVeth bool, err error) {
+	var netNs ns.NetNS
+	if nsName == "" {
+		netNs, err = ns.GetCurrentNS()
+	} else {
+		netNs, err = ns.GetNS(nsName)
+	}
+	if err != nil {
+		return false, false, err
+	}
+	defer netNs.Close()
+
+	err = netNs.Do(func(_ ns.NetNS) error {
+		link, lerr := netlink.LinkByName(linkName)
+		if lerr != nil {
+			// Not found (or unreadable) - treat as not present. The caller never
+			// deletes when the interface is reported absent, so this is fail-safe.
+			return nil
+		}
+		exists = true
+		_, isVeth = link.(*netlink.Veth)
+		return nil
+	})
+	return exists, isVeth, err
 }
 
 // When the remote peer tells the local node to remove the local end of the grpc-wire info
