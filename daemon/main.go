@@ -16,6 +16,14 @@ import (
 
 func main() {
 
+	// On a freshly-joined node meshnetd can start before the node's base CNI
+	// conflist is written to /etc/cni/net.d. Wait for it instead of exiting,
+	// which previously crash-looped the pod until the base conf appeared.
+	if err := cni.WaitForNetConfig(cni.DefaultWaitTimeout, cni.DefaultWaitInterval); err != nil {
+		log.Errorf("Failed to initialise CNI plugin: %v", err)
+		os.Exit(1)
+	}
+
 	if err := cni.Init(); err != nil {
 		log.Errorf("Failed to initialise CNI plugin: %v", err)
 		os.Exit(1)
