@@ -352,8 +352,14 @@ func RecvFrmLocalPodThread(wire *GRPCWire, locIfNm string) error {
 	defaultPort := wireutil.GRPCDefaultPort
 	pktBuffSz := int32(1024 * 64 * 10) //keep buffer for MAX 10 64K frames
 
-	if err := validatePeerNodeIP(context.Background(), wire.PeerNodeIP); err != nil {
-		grpcOvrlyLogger.Errorf("[Packet Receive thread] refusing to dial peer: %v", err)
+	// Validate the peer node IP before dialing it, but tolerate a transient
+	// miss instead of exiting: a peer node added by the autoscaler can be
+	// referenced by this wire before its Node object is observable here, and
+	// returning would permanently blackhole this forwarding direction (the
+	// wire interface stays up but every frame is dropped). Block until the
+	// peer becomes a known cluster node or the wire is torn down.
+	if err := waitForValidPeerNodeIP(context.Background(), wire.PeerNodeIP, wire.StopC); err != nil {
+		grpcOvrlyLogger.Errorf("[Packet Receive thread] %v", err)
 		return err
 	}
 	url := strings.TrimSpace(fmt.Sprintf("%s:%d", wire.PeerNodeIP, defaultPort))

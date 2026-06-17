@@ -2,6 +2,7 @@ package grpcwire
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
+
+func TestMain(m *testing.M) {
+	// The package logger is otherwise only initialised by the daemon binary;
+	// tests that exercise logging paths (e.g. waitForValidPeerNodeIP) need it.
+	InitLogger()
+	os.Exit(m.Run())
+}
 
 func resetPeerIPState(t *testing.T) {
 	t.Helper()
@@ -65,6 +73,68 @@ func TestValidatePeerNodeIP_UnknownIPRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not a known cluster node address") {
 		t.Errorf("unexpected error wording: %v", err)
+	}
+}
+
+func TestWaitForValidPeerNodeIP_ReturnsWhenKnown(t *testing.T) {
+	resetPeerIPState(t)
+	c := fake.NewSimpleClientset(nodeWithIPs("n1", "10.0.0.1", ""))
+	SetNodeClient(c)
+	if err := waitForValidPeerNodeIP(context.Background(), "10.0.0.1", make(chan struct{})); err != nil {
+		t.Fatalf("expected nil for known IP, got %v", err)
+	}
+}
+
+func TestWaitForValidPeerNodeIP_StopsWhenWireTorndown(t *testing.T) {
+	resetPeerIPState(t)
+	c := fake.NewSimpleClientset(nodeWithIPs("n1", "10.0.0.1", ""))
+	SetNodeClient(c)
+	stop := make(chan struct{})
+	close(stop)
+	err := waitForValidPeerNodeIP(context.Background(), "192.0.2.99", stop)
+	if err == nil {
+		t.Fatal("expected error when the wire is stopped before the peer becomes known")
+	}
+	if !strings.Contains(err.Error(), "wire stopped") {
+		t.Errorf("unexpected error wording: %v", err)
+	}
+}
+
+// Reproduces the autoscale blackhole: the peer node is unknown when the
+// forwarding thread starts and only becomes observable later. The thread must
+// recover rather than exit permanently.
+func TestWaitForValidPeerNodeIP_RecoversAfterNodeJoins(t *testing.T) {
+	resetPeerIPState(t)
+	prev := peerNodeIPRetryInterval
+	peerNodeIPRetryInterval = 10 * time.Millisecond
+	defer func() { peerNodeIPRetryInterval = prev }()
+
+	c := fake.NewSimpleClientset(nodeWithIPs("n1", "10.0.0.1", ""))
+	SetNodeClient(c)
+	stop := make(chan struct{})
+	defer close(stop)
+
+	go func() {
+		time.Sleep(40 * time.Millisecond)
+		_, _ = c.CoreV1().Nodes().Create(context.Background(),
+			nodeWithIPs("n2", "10.0.0.2", ""), metav1.CreateOptions{})
+		// Force the cache to refresh on the next validation, mimicking the
+		// TTL lapse that makes a newly joined node observable.
+		nodeIPMu.Lock()
+		nodeIPCacheExpiry = time.Now().Add(-time.Second)
+		nodeIPMu.Unlock()
+	}()
+
+	done := make(chan error, 1)
+	go func() { done <- waitForValidPeerNodeIP(context.Background(), "10.0.0.2", stop) }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected eventual success once node joined, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("waitForValidPeerNodeIP did not recover after the peer node joined")
 	}
 }
 
