@@ -21,6 +21,13 @@ import (
 
 const nodeIPCacheTTL = 30 * time.Second
 
+// peerNodeIPRetryInterval bounds how often waitForValidPeerNodeIP re-checks a
+// peer node IP that is not (yet) a known cluster node address. It is a var so
+// tests can shorten it. The node-IP cache itself refreshes on its own TTL
+// (nodeIPCacheTTL), so a node that joined via autoscale is recognised within
+// at most one TTL window once its Node object becomes observable here.
+var peerNodeIPRetryInterval = 5 * time.Second
+
 var (
 	nodeClient        kubernetes.Interface
 	nodeIPMu          sync.Mutex
@@ -74,6 +81,33 @@ func validatePeerNodeIP(ctx context.Context, ip string) error {
 		return nil
 	}
 	return fmt.Errorf("peer IP %q is not a known cluster node address", ip)
+}
+
+// waitForValidPeerNodeIP blocks until peerIP is a known cluster node address
+// (returning nil) or stopC is closed (returning an error).
+//
+// The peer node IP must be validated before the daemon dials it, but a miss
+// must not be fatal to the caller: during autoscale a peer node can be
+// referenced by a freshly-created wire before that node's Node object is
+// observable on this node. Treating that transient window as a hard failure
+// permanently kills the wire's packet-forwarding thread — the cross-node
+// tunnel interface stays Admin/Oper UP while silently dropping every frame.
+// Polling here lets the forwarding thread start as soon as the node becomes
+// known, and still never dials an IP that is not a real cluster node.
+func waitForValidPeerNodeIP(ctx context.Context, peerIP string, stopC <-chan struct{}) error {
+	for {
+		err := validatePeerNodeIP(ctx, peerIP)
+		if err == nil {
+			return nil
+		}
+		grpcOvrlyLogger.Infof("[Packet Receive thread] peer node IP %q not yet a known cluster node, retrying in %s: %v",
+			peerIP, peerNodeIPRetryInterval, err)
+		select {
+		case <-stopC:
+			return fmt.Errorf("wire stopped while waiting for peer node IP %q to become a known cluster node: last error: %w", peerIP, err)
+		case <-time.After(peerNodeIPRetryInterval):
+		}
+	}
 }
 
 func refreshNodeIPs(ctx context.Context, client kubernetes.Interface) (map[string]struct{}, error) {
