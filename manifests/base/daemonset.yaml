@@ -32,7 +32,7 @@ spec:
         - name: meshnet
           securityContext:
             privileged: true
-          image: public.ecr.aws/drivenets/meshnet-cni:v0.6.4-dn
+          image: dapdev.azurecr.io/meshnet-cni:v0.6.6-dn
           imagePullPolicy: IfNotPresent
           command: ["./entrypoint.sh"]
           resources:
