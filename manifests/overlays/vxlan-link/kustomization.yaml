@@ -30,4 +30,4 @@ resources:
 - ../../base/
 images:
 - name: public.ecr.aws/drivenets/meshnet-cni
-  newTag: 2b5d372-dirty
+  newTag: 93756dc
