@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/containernetworking/plugins/pkg/utils/sysctl"
+	"github.com/networkop/meshnet-cni/internal/cniconf"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
@@ -54,6 +56,36 @@ func getRandomIFName() string {
 	return fmt.Sprintf("koko%d", binary.LittleEndian.Uint32(b[:]))
 }
 
+// shouldLeaveAdminDown reports whether SetVethLink should leave the interface
+// admin-down after CNI ADD, per MESHNET_DATAPATH_IFACE_PREFIX.
+func shouldLeaveAdminDown(name string) bool {
+	prefix, configured := cniconf.LookupDatapathIfacePrefix()
+	if !configured {
+		return false
+	}
+	if prefix == "" {
+		return true
+	}
+	return isDatapathIface(name, prefix)
+}
+
+// isDatapathIface reports whether name matches <prefix><N> (e.g. eno1, eth0).
+func isDatapathIface(name, prefix string) bool {
+	if prefix == "" || !strings.HasPrefix(name, prefix) {
+		return false
+	}
+	suffix := name[len(prefix):]
+	if suffix == "" {
+		return false
+	}
+	for _, c := range suffix {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func makeVethPair(name, peer string, mtu int) (netlink.Link, error) {
 	veth := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
@@ -70,6 +102,9 @@ func makeVethPair(name, peer string, mtu int) (netlink.Link, error) {
 }
 
 const DefaultMTU = 1500
+
+// VxlanIPv4Overhead is the IPv4/UDP/VXLAN header size on the underlay.
+const VxlanIPv4Overhead = 50
 
 // GetVethPair creates a veth pair and returns both links.
 func GetVethPair(name1, name2 string, mtu int) (link1, link2 netlink.Link, err error) {
@@ -117,8 +152,16 @@ func AddVxLanInterface(vxlan VxLan, devName string) error {
 		L2miss:       true,
 		L3miss:       true,
 	}
-	if vxlan.MTU != 0 {
-		vxlanconf.LinkAttrs.MTU = vxlan.MTU
+	mtu := vxlan.MTU
+	maxMTU := parentIF.Attrs().MTU - VxlanIPv4Overhead
+	if mtu == 0 && maxMTU > 0 {
+		mtu = maxMTU
+	}
+	if maxMTU > 0 && mtu > maxMTU {
+		mtu = maxMTU
+	}
+	if mtu > 0 {
+		vxlanconf.LinkAttrs.MTU = mtu
 	}
 	if err = netlink.LinkAdd(&vxlanconf); err != nil {
 		return fmt.Errorf("failed to add vxlan %s: %v", devName, err)
@@ -148,8 +191,9 @@ func AddMacVLanInterface(macvlan MacVLan, devName string) error {
 	return nil
 }
 
-// SetVethLink moves a link into the VEth's namespace, renames it, sets it up,
-// and optionally assigns IP addresses.
+// SetVethLink moves a link into the VEth's namespace, renames it, optionally
+// assigns IP addresses, then sets oper state: pod datapath ports (<prefix><N>)
+// stay admin-down by default; all other names are brought up.
 func (veth *VEth) SetVethLink(link netlink.Link) error {
 	var vethNs ns.NetNS
 	var err error
@@ -188,10 +232,6 @@ func (veth *VEth) SetVethLink(link netlink.Link) error {
 			}
 		}
 
-		if err = netlink.LinkSetUp(link); err != nil {
-			return fmt.Errorf("failed to set %q up: %v", veth.LinkName, err)
-		}
-
 		for i := 0; i < len(veth.IPAddr); i++ {
 			if veth.IPAddr[i].IP.To4() == nil {
 				ipv6SysctlName := fmt.Sprintf("net.ipv6.conf.%s.disable_ipv6", veth.LinkName)
@@ -205,6 +245,14 @@ func (veth *VEth) SetVethLink(link netlink.Link) error {
 				return fmt.Errorf("failed to add IP addr %v to %q: %v",
 					addr, veth.LinkName, err)
 			}
+		}
+
+		if shouldLeaveAdminDown(veth.LinkName) {
+			if err = netlink.LinkSetDown(link); err != nil {
+				return fmt.Errorf("failed to set %q down: %v", veth.LinkName, err)
+			}
+		} else if err = netlink.LinkSetUp(link); err != nil {
+			return fmt.Errorf("failed to set %q up: %v", veth.LinkName, err)
 		}
 		return nil
 	})

@@ -711,6 +711,157 @@ func (x *WireDownResponse) GetResponse() bool {
 	return false
 }
 
+// Carrier/link-state of one inter-node link end, propagated to the peer node.
+type WireLinkState struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// link_uid and local_pod_net_ns are informational (logging/debug). For
+	// grpc-wire the authoritative identity is peer_iface_id; for VXLAN the
+	// receiver matches by link_uid.
+	LinkUid       int64  `protobuf:"varint,1,opt,name=link_uid,json=linkUid,proto3" json:"link_uid,omitempty"`
+	LocalPodNetNs string `protobuf:"bytes,2,opt,name=local_pod_net_ns,json=localPodNetNs,proto3" json:"local_pod_net_ns,omitempty"`
+	Up            bool   `protobuf:"varint,3,opt,name=up,proto3" json:"up,omitempty"`
+	// OS interface index of the host-side veth on the RECEIVING node (the
+	// sender's WireIfaceIDOnPeerNode). The receiver matches its wire by this id.
+	PeerIfaceId   int64 `protobuf:"varint,4,opt,name=peer_iface_id,json=peerIfaceId,proto3" json:"peer_iface_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WireLinkState) Reset() {
+	*x = WireLinkState{}
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WireLinkState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WireLinkState) ProtoMessage() {}
+
+func (x *WireLinkState) ProtoReflect() protoreflect.Message {
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WireLinkState.ProtoReflect.Descriptor instead.
+func (*WireLinkState) Descriptor() ([]byte, []int) {
+	return file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *WireLinkState) GetLinkUid() int64 {
+	if x != nil {
+		return x.LinkUid
+	}
+	return 0
+}
+
+func (x *WireLinkState) GetLocalPodNetNs() string {
+	if x != nil {
+		return x.LocalPodNetNs
+	}
+	return ""
+}
+
+func (x *WireLinkState) GetUp() bool {
+	if x != nil {
+		return x.Up
+	}
+	return false
+}
+
+func (x *WireLinkState) GetPeerIfaceId() int64 {
+	if x != nil {
+		return x.PeerIfaceId
+	}
+	return 0
+}
+
+// VxlanLinkDef registers an in-pod VXLAN endpoint for carrier propagation.
+type VxlanLinkDef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LinkUid       int64                  `protobuf:"varint,1,opt,name=link_uid,json=linkUid,proto3" json:"link_uid,omitempty"`
+	NetNs         string                 `protobuf:"bytes,2,opt,name=net_ns,json=netNs,proto3" json:"net_ns,omitempty"`
+	IntfName      string                 `protobuf:"bytes,3,opt,name=intf_name,json=intfName,proto3" json:"intf_name,omitempty"`
+	PeerNodeIp    string                 `protobuf:"bytes,4,opt,name=peer_node_ip,json=peerNodeIp,proto3" json:"peer_node_ip,omitempty"`
+	KubeNs        string                 `protobuf:"bytes,5,opt,name=kube_ns,json=kubeNs,proto3" json:"kube_ns,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VxlanLinkDef) Reset() {
+	*x = VxlanLinkDef{}
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VxlanLinkDef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VxlanLinkDef) ProtoMessage() {}
+
+func (x *VxlanLinkDef) ProtoReflect() protoreflect.Message {
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VxlanLinkDef.ProtoReflect.Descriptor instead.
+func (*VxlanLinkDef) Descriptor() ([]byte, []int) {
+	return file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *VxlanLinkDef) GetLinkUid() int64 {
+	if x != nil {
+		return x.LinkUid
+	}
+	return 0
+}
+
+func (x *VxlanLinkDef) GetNetNs() string {
+	if x != nil {
+		return x.NetNs
+	}
+	return ""
+}
+
+func (x *VxlanLinkDef) GetIntfName() string {
+	if x != nil {
+		return x.IntfName
+	}
+	return ""
+}
+
+func (x *VxlanLinkDef) GetPeerNodeIp() string {
+	if x != nil {
+		return x.PeerNodeIp
+	}
+	return ""
+}
+
+func (x *VxlanLinkDef) GetKubeNs() string {
+	if x != nil {
+		return x.KubeNs
+	}
+	return ""
+}
+
 type Packet struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// the remote machine interface id, to which this packet should be delivered.
@@ -722,7 +873,7 @@ type Packet struct {
 
 func (x *Packet) Reset() {
 	*x = Packet{}
-	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[9]
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -734,7 +885,7 @@ func (x *Packet) String() string {
 func (*Packet) ProtoMessage() {}
 
 func (x *Packet) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[9]
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -747,7 +898,7 @@ func (x *Packet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Packet.ProtoReflect.Descriptor instead.
 func (*Packet) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescGZIP(), []int{9}
+	return file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Packet) GetRemotIntfId() int64 {
@@ -774,7 +925,7 @@ type GenerateNodeInterfaceNameRequest struct {
 
 func (x *GenerateNodeInterfaceNameRequest) Reset() {
 	*x = GenerateNodeInterfaceNameRequest{}
-	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[10]
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -786,7 +937,7 @@ func (x *GenerateNodeInterfaceNameRequest) String() string {
 func (*GenerateNodeInterfaceNameRequest) ProtoMessage() {}
 
 func (x *GenerateNodeInterfaceNameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[10]
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -799,7 +950,7 @@ func (x *GenerateNodeInterfaceNameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateNodeInterfaceNameRequest.ProtoReflect.Descriptor instead.
 func (*GenerateNodeInterfaceNameRequest) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescGZIP(), []int{10}
+	return file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GenerateNodeInterfaceNameRequest) GetPodIntfName() string {
@@ -826,7 +977,7 @@ type GenerateNodeInterfaceNameResponse struct {
 
 func (x *GenerateNodeInterfaceNameResponse) Reset() {
 	*x = GenerateNodeInterfaceNameResponse{}
-	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[11]
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -838,7 +989,7 @@ func (x *GenerateNodeInterfaceNameResponse) String() string {
 func (*GenerateNodeInterfaceNameResponse) ProtoMessage() {}
 
 func (x *GenerateNodeInterfaceNameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[11]
+	mi := &file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -851,7 +1002,7 @@ func (x *GenerateNodeInterfaceNameResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GenerateNodeInterfaceNameResponse.ProtoReflect.Descriptor instead.
 func (*GenerateNodeInterfaceNameResponse) Descriptor() ([]byte, []int) {
-	return file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescGZIP(), []int{11}
+	return file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GenerateNodeInterfaceNameResponse) GetOk() bool {
@@ -929,7 +1080,19 @@ const file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDesc = "" +
 	"\fpeer_intf_id\x18\x02 \x01(\x03R\n" +
 	"peerIntfId\".\n" +
 	"\x10WireDownResponse\x12\x1a\n" +
-	"\bresponse\x18\x01 \x01(\bR\bresponse\"B\n" +
+	"\bresponse\x18\x01 \x01(\bR\bresponse\"\x87\x01\n" +
+	"\rWireLinkState\x12\x19\n" +
+	"\blink_uid\x18\x01 \x01(\x03R\alinkUid\x12'\n" +
+	"\x10local_pod_net_ns\x18\x02 \x01(\tR\rlocalPodNetNs\x12\x0e\n" +
+	"\x02up\x18\x03 \x01(\bR\x02up\x12\"\n" +
+	"\rpeer_iface_id\x18\x04 \x01(\x03R\vpeerIfaceId\"\x98\x01\n" +
+	"\fVxlanLinkDef\x12\x19\n" +
+	"\blink_uid\x18\x01 \x01(\x03R\alinkUid\x12\x15\n" +
+	"\x06net_ns\x18\x02 \x01(\tR\x05netNs\x12\x1b\n" +
+	"\tintf_name\x18\x03 \x01(\tR\bintfName\x12 \n" +
+	"\fpeer_node_ip\x18\x04 \x01(\tR\n" +
+	"peerNodeIp\x12\x17\n" +
+	"\akube_ns\x18\x05 \x01(\tR\x06kubeNs\"B\n" +
 	"\x06Packet\x12\"\n" +
 	"\rremot_intf_id\x18\x01 \x01(\x03R\vremotIntfId\x12\x14\n" +
 	"\x05frame\x18\x02 \x01(\fR\x05frame\"a\n" +
@@ -938,7 +1101,7 @@ const file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDesc = "" +
 	"\bpod_name\x18\x02 \x01(\tR\apodName\"Y\n" +
 	"!GenerateNodeInterfaceNameResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12$\n" +
-	"\x0enode_intf_name\x18\x02 \x01(\tR\fnodeIntfName2\xc0\x05\n" +
+	"\x0enode_intf_name\x18\x02 \x01(\tR\fnodeIntfName2\xe8\x06\n" +
 	"\x05Local\x126\n" +
 	"\x03Get\x12\x19.meshnet.v1beta1.PodQuery\x1a\x14.meshnet.v1beta1.Pod\x12?\n" +
 	"\bSetAlive\x12\x14.meshnet.v1beta1.Pod\x1a\x1d.meshnet.v1beta1.BoolResponse\x12H\n" +
@@ -948,11 +1111,14 @@ const file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDesc = "" +
 	"\x0eGRPCWireExists\x12\x18.meshnet.v1beta1.WireDef\x1a#.meshnet.v1beta1.WireCreateResponse\x12K\n" +
 	"\x10AddGRPCWireLocal\x12\x18.meshnet.v1beta1.WireDef\x1a\x1d.meshnet.v1beta1.BoolResponse\x12F\n" +
 	"\vRemGRPCWire\x12\x18.meshnet.v1beta1.WireDef\x1a\x1d.meshnet.v1beta1.BoolResponse\x12\x82\x01\n" +
-	"\x19GenerateNodeInterfaceName\x121.meshnet.v1beta1.GenerateNodeInterfaceNameRequest\x1a2.meshnet.v1beta1.GenerateNodeInterfaceNameResponse2\xf4\x01\n" +
+	"\x19GenerateNodeInterfaceName\x121.meshnet.v1beta1.GenerateNodeInterfaceNameRequest\x1a2.meshnet.v1beta1.GenerateNodeInterfaceNameResponse\x12Q\n" +
+	"\x11RegisterVxlanLink\x12\x1d.meshnet.v1beta1.VxlanLinkDef\x1a\x1d.meshnet.v1beta1.BoolResponse\x12S\n" +
+	"\x13UnregisterVxlanLink\x12\x1d.meshnet.v1beta1.VxlanLinkDef\x1a\x1d.meshnet.v1beta1.BoolResponse2\xc7\x02\n" +
 	"\x06Remote\x12C\n" +
 	"\x06Update\x12\x1a.meshnet.v1beta1.RemotePod\x1a\x1d.meshnet.v1beta1.BoolResponse\x12R\n" +
 	"\x11AddGRPCWireRemote\x12\x18.meshnet.v1beta1.WireDef\x1a#.meshnet.v1beta1.WireCreateResponse\x12Q\n" +
-	"\x12GRPCWireDownRemote\x12\x18.meshnet.v1beta1.WireDef\x1a!.meshnet.v1beta1.WireDownResponse2\x9e\x01\n" +
+	"\x12GRPCWireDownRemote\x12\x18.meshnet.v1beta1.WireDef\x1a!.meshnet.v1beta1.WireDownResponse\x12Q\n" +
+	"\x10SetPeerLinkState\x12\x1e.meshnet.v1beta1.WireLinkState\x1a\x1d.meshnet.v1beta1.BoolResponse2\x9e\x01\n" +
 	"\fWireProtocol\x12D\n" +
 	"\n" +
 	"SendToOnce\x12\x17.meshnet.v1beta1.Packet\x1a\x1d.meshnet.v1beta1.BoolResponse\x12H\n" +
@@ -970,7 +1136,7 @@ func file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescGZIP() []byte {
 	return file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDescData
 }
 
-var file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_daemon_proto_meshnet_v1beta1_meshnet_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_daemon_proto_meshnet_v1beta1_meshnet_proto_goTypes = []any{
 	(*Pod)(nil),                               // 0: meshnet.v1beta1.Pod
 	(*Link)(nil),                              // 1: meshnet.v1beta1.Link
@@ -981,9 +1147,11 @@ var file_daemon_proto_meshnet_v1beta1_meshnet_proto_goTypes = []any{
 	(*WireDef)(nil),                           // 6: meshnet.v1beta1.WireDef
 	(*WireCreateResponse)(nil),                // 7: meshnet.v1beta1.WireCreateResponse
 	(*WireDownResponse)(nil),                  // 8: meshnet.v1beta1.WireDownResponse
-	(*Packet)(nil),                            // 9: meshnet.v1beta1.Packet
-	(*GenerateNodeInterfaceNameRequest)(nil),  // 10: meshnet.v1beta1.GenerateNodeInterfaceNameRequest
-	(*GenerateNodeInterfaceNameResponse)(nil), // 11: meshnet.v1beta1.GenerateNodeInterfaceNameResponse
+	(*WireLinkState)(nil),                     // 9: meshnet.v1beta1.WireLinkState
+	(*VxlanLinkDef)(nil),                      // 10: meshnet.v1beta1.VxlanLinkDef
+	(*Packet)(nil),                            // 11: meshnet.v1beta1.Packet
+	(*GenerateNodeInterfaceNameRequest)(nil),  // 12: meshnet.v1beta1.GenerateNodeInterfaceNameRequest
+	(*GenerateNodeInterfaceNameResponse)(nil), // 13: meshnet.v1beta1.GenerateNodeInterfaceNameResponse
 }
 var file_daemon_proto_meshnet_v1beta1_meshnet_proto_depIdxs = []int32{
 	1,  // 0: meshnet.v1beta1.Pod.links:type_name -> meshnet.v1beta1.Link
@@ -995,28 +1163,34 @@ var file_daemon_proto_meshnet_v1beta1_meshnet_proto_depIdxs = []int32{
 	6,  // 6: meshnet.v1beta1.Local.GRPCWireExists:input_type -> meshnet.v1beta1.WireDef
 	6,  // 7: meshnet.v1beta1.Local.AddGRPCWireLocal:input_type -> meshnet.v1beta1.WireDef
 	6,  // 8: meshnet.v1beta1.Local.RemGRPCWire:input_type -> meshnet.v1beta1.WireDef
-	10, // 9: meshnet.v1beta1.Local.GenerateNodeInterfaceName:input_type -> meshnet.v1beta1.GenerateNodeInterfaceNameRequest
-	5,  // 10: meshnet.v1beta1.Remote.Update:input_type -> meshnet.v1beta1.RemotePod
-	6,  // 11: meshnet.v1beta1.Remote.AddGRPCWireRemote:input_type -> meshnet.v1beta1.WireDef
-	6,  // 12: meshnet.v1beta1.Remote.GRPCWireDownRemote:input_type -> meshnet.v1beta1.WireDef
-	9,  // 13: meshnet.v1beta1.WireProtocol.SendToOnce:input_type -> meshnet.v1beta1.Packet
-	9,  // 14: meshnet.v1beta1.WireProtocol.SendToStream:input_type -> meshnet.v1beta1.Packet
-	0,  // 15: meshnet.v1beta1.Local.Get:output_type -> meshnet.v1beta1.Pod
-	4,  // 16: meshnet.v1beta1.Local.SetAlive:output_type -> meshnet.v1beta1.BoolResponse
-	4,  // 17: meshnet.v1beta1.Local.SkipReverse:output_type -> meshnet.v1beta1.BoolResponse
-	4,  // 18: meshnet.v1beta1.Local.Skip:output_type -> meshnet.v1beta1.BoolResponse
-	4,  // 19: meshnet.v1beta1.Local.IsSkipped:output_type -> meshnet.v1beta1.BoolResponse
-	7,  // 20: meshnet.v1beta1.Local.GRPCWireExists:output_type -> meshnet.v1beta1.WireCreateResponse
-	4,  // 21: meshnet.v1beta1.Local.AddGRPCWireLocal:output_type -> meshnet.v1beta1.BoolResponse
-	4,  // 22: meshnet.v1beta1.Local.RemGRPCWire:output_type -> meshnet.v1beta1.BoolResponse
-	11, // 23: meshnet.v1beta1.Local.GenerateNodeInterfaceName:output_type -> meshnet.v1beta1.GenerateNodeInterfaceNameResponse
-	4,  // 24: meshnet.v1beta1.Remote.Update:output_type -> meshnet.v1beta1.BoolResponse
-	7,  // 25: meshnet.v1beta1.Remote.AddGRPCWireRemote:output_type -> meshnet.v1beta1.WireCreateResponse
-	8,  // 26: meshnet.v1beta1.Remote.GRPCWireDownRemote:output_type -> meshnet.v1beta1.WireDownResponse
-	4,  // 27: meshnet.v1beta1.WireProtocol.SendToOnce:output_type -> meshnet.v1beta1.BoolResponse
-	4,  // 28: meshnet.v1beta1.WireProtocol.SendToStream:output_type -> meshnet.v1beta1.BoolResponse
-	15, // [15:29] is the sub-list for method output_type
-	1,  // [1:15] is the sub-list for method input_type
+	12, // 9: meshnet.v1beta1.Local.GenerateNodeInterfaceName:input_type -> meshnet.v1beta1.GenerateNodeInterfaceNameRequest
+	10, // 10: meshnet.v1beta1.Local.RegisterVxlanLink:input_type -> meshnet.v1beta1.VxlanLinkDef
+	10, // 11: meshnet.v1beta1.Local.UnregisterVxlanLink:input_type -> meshnet.v1beta1.VxlanLinkDef
+	5,  // 12: meshnet.v1beta1.Remote.Update:input_type -> meshnet.v1beta1.RemotePod
+	6,  // 13: meshnet.v1beta1.Remote.AddGRPCWireRemote:input_type -> meshnet.v1beta1.WireDef
+	6,  // 14: meshnet.v1beta1.Remote.GRPCWireDownRemote:input_type -> meshnet.v1beta1.WireDef
+	9,  // 15: meshnet.v1beta1.Remote.SetPeerLinkState:input_type -> meshnet.v1beta1.WireLinkState
+	11, // 16: meshnet.v1beta1.WireProtocol.SendToOnce:input_type -> meshnet.v1beta1.Packet
+	11, // 17: meshnet.v1beta1.WireProtocol.SendToStream:input_type -> meshnet.v1beta1.Packet
+	0,  // 18: meshnet.v1beta1.Local.Get:output_type -> meshnet.v1beta1.Pod
+	4,  // 19: meshnet.v1beta1.Local.SetAlive:output_type -> meshnet.v1beta1.BoolResponse
+	4,  // 20: meshnet.v1beta1.Local.SkipReverse:output_type -> meshnet.v1beta1.BoolResponse
+	4,  // 21: meshnet.v1beta1.Local.Skip:output_type -> meshnet.v1beta1.BoolResponse
+	4,  // 22: meshnet.v1beta1.Local.IsSkipped:output_type -> meshnet.v1beta1.BoolResponse
+	7,  // 23: meshnet.v1beta1.Local.GRPCWireExists:output_type -> meshnet.v1beta1.WireCreateResponse
+	4,  // 24: meshnet.v1beta1.Local.AddGRPCWireLocal:output_type -> meshnet.v1beta1.BoolResponse
+	4,  // 25: meshnet.v1beta1.Local.RemGRPCWire:output_type -> meshnet.v1beta1.BoolResponse
+	13, // 26: meshnet.v1beta1.Local.GenerateNodeInterfaceName:output_type -> meshnet.v1beta1.GenerateNodeInterfaceNameResponse
+	4,  // 27: meshnet.v1beta1.Local.RegisterVxlanLink:output_type -> meshnet.v1beta1.BoolResponse
+	4,  // 28: meshnet.v1beta1.Local.UnregisterVxlanLink:output_type -> meshnet.v1beta1.BoolResponse
+	4,  // 29: meshnet.v1beta1.Remote.Update:output_type -> meshnet.v1beta1.BoolResponse
+	7,  // 30: meshnet.v1beta1.Remote.AddGRPCWireRemote:output_type -> meshnet.v1beta1.WireCreateResponse
+	8,  // 31: meshnet.v1beta1.Remote.GRPCWireDownRemote:output_type -> meshnet.v1beta1.WireDownResponse
+	4,  // 32: meshnet.v1beta1.Remote.SetPeerLinkState:output_type -> meshnet.v1beta1.BoolResponse
+	4,  // 33: meshnet.v1beta1.WireProtocol.SendToOnce:output_type -> meshnet.v1beta1.BoolResponse
+	4,  // 34: meshnet.v1beta1.WireProtocol.SendToStream:output_type -> meshnet.v1beta1.BoolResponse
+	18, // [18:35] is the sub-list for method output_type
+	1,  // [1:18] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
@@ -1033,7 +1207,7 @@ func file_daemon_proto_meshnet_v1beta1_meshnet_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDesc), len(file_daemon_proto_meshnet_v1beta1_meshnet_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

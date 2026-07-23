@@ -376,9 +376,10 @@ func (m *Meshnet) IsSkipped(ctx context.Context, skip *mpb.SkipQuery) (*mpb.Bool
 
 func (m *Meshnet) Update(ctx context.Context, pod *mpb.RemotePod) (*mpb.BoolResponse, error) {
 	if err := vxlan.CreateOrUpdate(pod); err != nil {
-		mnetdLogger.Errorf("Failed to Update Vxlan")
-		return &mpb.BoolResponse{Response: false}, nil
+		mnetdLogger.Errorf("Failed to Update Vxlan: %v", err)
+		return &mpb.BoolResponse{Response: false}, err
 	}
+	vxlan.RegisterFromRemotePod(pod)
 	return &mpb.BoolResponse{Response: true}, nil
 }
 
@@ -458,6 +459,50 @@ func (m *Meshnet) GRPCWireDownRemote(ctx context.Context, wireDef *mpb.WireDef) 
 		"overlay": "gRPC",
 	}).Errorf("[WIRE-DOWN]Remote end err: %v", err)
 	return &mpb.WireDownResponse{Response: false}, err
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// SetPeerLinkState mirrors the carrier of the peer's link end onto this node
+// (SW-289713). Opt-in: when carrier propagation is off on this node it acks
+// without touching links, so a peer that has it on does not see errors/retries.
+func (m *Meshnet) SetPeerLinkState(ctx context.Context, in *mpb.WireLinkState) (*mpb.BoolResponse, error) {
+	if !grpcwire.CarrierPropagationEnabled() {
+		return &mpb.BoolResponse{Response: true}, nil
+	}
+	if in.PeerIfaceId != 0 {
+		if _, ok := grpcwire.GetWireByIfIndex(in.PeerIfaceId); ok {
+			if err := grpcwire.SetLocalVethState(in.PeerIfaceId, int(in.LinkUid), in.LocalPodNetNs, in.Up); err != nil {
+				log.WithFields(log.Fields{
+					"daemon":  "meshnetd",
+					"overlay": "gRPC",
+				}).Errorf("SetPeerLinkState: uid %d up=%t failed: %v", in.LinkUid, in.Up, err)
+				return &mpb.BoolResponse{Response: false}, err
+			}
+			return &mpb.BoolResponse{Response: true}, nil
+		}
+	}
+	if err := vxlan.SetLocalLinkState(int(in.LinkUid), in.Up); err != nil {
+		log.WithFields(log.Fields{
+			"daemon":  "meshnetd",
+			"overlay": "vxLAN",
+		}).Errorf("SetPeerLinkState: uid %d up=%t failed: %v", in.LinkUid, in.Up, err)
+		return &mpb.BoolResponse{Response: false}, err
+	}
+	return &mpb.BoolResponse{Response: true}, nil
+}
+
+// RegisterVxlanLink records an in-pod VXLAN endpoint for carrier propagation.
+func (m *Meshnet) RegisterVxlanLink(ctx context.Context, in *mpb.VxlanLinkDef) (*mpb.BoolResponse, error) {
+	vxlan.RegisterFromDef(in)
+	return &mpb.BoolResponse{Response: true}, nil
+}
+
+// UnregisterVxlanLink removes a tracked VXLAN link.
+func (m *Meshnet) UnregisterVxlanLink(ctx context.Context, in *mpb.VxlanLinkDef) (*mpb.BoolResponse, error) {
+	if in != nil {
+		vxlan.UnregisterLink(in.KubeNs, int(in.LinkUid))
+	}
+	return &mpb.BoolResponse{Response: true}, nil
 }
 
 // ---------------------------------------------------------------------------------------------------------------

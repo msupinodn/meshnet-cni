@@ -105,6 +105,28 @@ message WireDownResponse {
   bool response = 1;
 }
 
+// Carrier/link-state of one inter-node link end, propagated to the peer node.
+message WireLinkState {
+  // link_uid and local_pod_net_ns are informational (logging/debug). For
+  // grpc-wire the authoritative identity is peer_iface_id; for VXLAN the
+  // receiver matches by link_uid.
+  int64 link_uid = 1;
+  string local_pod_net_ns = 2;
+  bool up = 3;
+  // OS interface index of the host-side veth on the RECEIVING node (the
+  // sender's WireIfaceIDOnPeerNode). The receiver matches its wire by this id.
+  int64 peer_iface_id = 4;
+}
+
+// VxlanLinkDef registers an in-pod VXLAN endpoint for carrier propagation.
+message VxlanLinkDef {
+  int64 link_uid = 1;
+  string net_ns = 2;
+  string intf_name = 3;
+  string peer_node_ip = 4;
+  string kube_ns = 5;
+}
+
 message Packet {
   // the remote machine interface id, to which this packet should be delivered. 
   int64 remot_intf_id = 1;   
@@ -137,12 +159,20 @@ service Local {
   // Each veth name must be unique with in a node. Daemon generates an ID that 
   // is unique in this node.
   rpc GenerateNodeInterfaceName(GenerateNodeInterfaceNameRequest) returns (GenerateNodeInterfaceNameResponse);
+
+  // Register an in-pod VXLAN link for SW-289713 carrier propagation.
+  rpc RegisterVxlanLink(VxlanLinkDef) returns (BoolResponse);
+  rpc UnregisterVxlanLink(VxlanLinkDef) returns (BoolResponse);
 }
 
 service Remote {
   rpc Update (RemotePod) returns (BoolResponse);
   rpc AddGRPCWireRemote(WireDef) returns (WireCreateResponse);
   rpc GRPCWireDownRemote(WireDef) returns (WireDownResponse);
+
+  // Mirror the carrier/link-state of the peer's link end onto this node
+  // (SW-289713). Opt-in via MESHNET_PROPAGATE_CARRIER.
+  rpc SetPeerLinkState(WireLinkState) returns (BoolResponse);
 }
 
 service WireProtocol {

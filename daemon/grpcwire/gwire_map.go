@@ -142,3 +142,28 @@ func GetHostIntfHndl(intfID int64) (*pcap.Handle, error) {
 	return nil, fmt.Errorf("node interface %d is not found in local db", intfID)
 
 }
+
+// GetWireByIfIndex returns the wire whose host-side veth has the given OS
+// interface index. Used by the carrier watcher (SW-289713) to map a netlink
+// link event back to a grpc-wire.
+func GetWireByIfIndex(ifindex int64) (*GRPCWire, bool) {
+	wires.mu.Lock()
+	defer wires.mu.Unlock()
+	for _, w := range wires.wires {
+		if w.LocalNodeIfaceID == ifindex {
+			return w, true
+		}
+	}
+	return nil, false
+}
+
+// snapshotWires returns a copy of the current wire list for lock-free iteration.
+func snapshotWires() []*GRPCWire {
+	wires.mu.Lock()
+	defer wires.mu.Unlock()
+	out := make([]*GRPCWire, 0, len(wires.wires))
+	for _, w := range wires.wires {
+		out = append(out, w)
+	}
+	return out
+}

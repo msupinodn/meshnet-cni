@@ -59,6 +59,7 @@ func main() {
 
 	grpcwire.SetGWireClient(m.GWireDynClient)
 	grpcwire.SetNodeClient(m.KClient)
+	grpcwire.InitCarrierPropagation()
 
 	// read grpcwire info (if any) from data store and update local db
 	err = grpcwire.ReconGWires()
@@ -66,6 +67,15 @@ func main() {
 		log.Errorf("could not reconcile grpc wire: %v", err)
 		// generate error and continue
 	}
+
+	// SW-289713: re-assert local carrier to peers after recon (so a link that
+	// was down before a restart is re-signalled) and start watching host-side
+	// veth carrier to propagate link-down/up to the peer. Both are no-ops unless
+	// MESHNET_PROPAGATE_CARRIER is enabled.
+	grpcwire.ReassertLocalLinkStates()
+	go grpcwire.StartCarrierWatch(nil)
+	vxlan.ReassertLocalLinkStates()
+	go vxlan.StartCarrierWatch(nil)
 
 	// Clear the readiness taint that kept workload pods off this node, but only
 	// once meshnet CNI can actually wire pods: the conflist must be present on

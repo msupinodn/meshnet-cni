@@ -12,12 +12,15 @@ import (
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
+	"github.com/networkop/meshnet-cni/internal/cniconf"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
 	defaultCNIFile    = "00-meshnet.conflist"
 	interNodeLinkConf = "/etc/cni/net.d/meshnet-inter-node-link-type"
+	datapathIfacePrefixEnv = "MESHNET_DATAPATH_IFACE_PREFIX"
+	defaultLinkMTUEnv      = "MESHNET_DEFAULT_LINK_MTU"
 	defaultPluginName = "meshnet"
 
 	// DefaultWaitTimeout bounds how long WaitForNetConfig blocks waiting for the
@@ -118,9 +121,39 @@ func saveInterNodeLinkConf() error {
 	return ioutil.WriteFile(interNodeLinkConf, []byte(os.Getenv("INTER_NODE_LINK_TYPE")), os.FileMode(0644))
 }
 
+func saveDatapathIfacePrefixConf() error {
+	prefix, ok := os.LookupEnv(datapathIfacePrefixEnv)
+	if !ok {
+		return removeDatapathIfacePrefixConf()
+	}
+	return ioutil.WriteFile(cniconf.DatapathIfacePrefixConf, []byte(strings.TrimSpace(prefix)), os.FileMode(0644))
+}
+
+func saveDefaultLinkMTUConf() error {
+	mtu, ok := os.LookupEnv(defaultLinkMTUEnv)
+	if !ok {
+		return removeDefaultLinkMTUConf()
+	}
+	return ioutil.WriteFile(cniconf.DefaultLinkMTUConf, []byte(strings.TrimSpace(mtu)), os.FileMode(0644))
+}
+
 func removeInterNodeLinkConf() error {
 	if err := os.Remove(interNodeLinkConf); err != nil {
 		return fmt.Errorf("failed to remove %s: %v", interNodeLinkConf, err)
+	}
+	return nil
+}
+
+func removeDatapathIfacePrefixConf() error {
+	if err := os.Remove(cniconf.DatapathIfacePrefixConf); err != nil {
+		return fmt.Errorf("failed to remove %s: %v", cniconf.DatapathIfacePrefixConf, err)
+	}
+	return nil
+}
+
+func removeDefaultLinkMTUConf() error {
+	if err := os.Remove(cniconf.DefaultLinkMTUConf); err != nil {
+		return fmt.Errorf("failed to remove %s: %v", cniconf.DefaultLinkMTUConf, err)
 	}
 	return nil
 }
@@ -175,6 +208,12 @@ func Init() error {
 	if err := saveInterNodeLinkConf(); err != nil {
 		return err
 	}
+	if err := saveDatapathIfacePrefixConf(); err != nil {
+		return err
+	}
+	if err := saveDefaultLinkMTUConf(); err != nil {
+		return err
+	}
 
 	return saveConfList(conf)
 }
@@ -186,5 +225,11 @@ func Cleanup() {
 	}
 	if err := removeInterNodeLinkConf(); err != nil {
 		log.Infof("Failed to remove inter node link conf: %v", err)
+	}
+	if err := removeDatapathIfacePrefixConf(); err != nil {
+		log.Infof("Failed to remove datapath iface prefix conf: %v", err)
+	}
+	if err := removeDefaultLinkMTUConf(); err != nil {
+		log.Infof("Failed to remove default link mtu conf: %v", err)
 	}
 }

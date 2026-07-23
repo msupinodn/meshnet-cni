@@ -305,6 +305,12 @@ spec:
               fieldPath: status.hostIP
         - name: INTER_NODE_LINK_TYPE
           value: GRPC
+        - name: MESHNET_PROPAGATE_CARRIER
+          value: "1"
+        - name: MESHNET_DATAPATH_IFACE_PREFIX
+          value: eno
+        - name: MESHNET_DEFAULT_LINK_MTU
+          value: "9300"
         - name: NODE_NAME
           valueFrom:
             fieldRef:

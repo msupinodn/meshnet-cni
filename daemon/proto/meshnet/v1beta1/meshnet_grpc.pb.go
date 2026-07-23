@@ -28,6 +28,8 @@ const (
 	Local_AddGRPCWireLocal_FullMethodName          = "/meshnet.v1beta1.Local/AddGRPCWireLocal"
 	Local_RemGRPCWire_FullMethodName               = "/meshnet.v1beta1.Local/RemGRPCWire"
 	Local_GenerateNodeInterfaceName_FullMethodName = "/meshnet.v1beta1.Local/GenerateNodeInterfaceName"
+	Local_RegisterVxlanLink_FullMethodName         = "/meshnet.v1beta1.Local/RegisterVxlanLink"
+	Local_UnregisterVxlanLink_FullMethodName       = "/meshnet.v1beta1.Local/UnregisterVxlanLink"
 )
 
 // LocalClient is the client API for Local service.
@@ -46,6 +48,9 @@ type LocalClient interface {
 	// Each veth name must be unique with in a node. Daemon generates an ID that
 	// is unique in this node.
 	GenerateNodeInterfaceName(ctx context.Context, in *GenerateNodeInterfaceNameRequest, opts ...grpc.CallOption) (*GenerateNodeInterfaceNameResponse, error)
+	// Register an in-pod VXLAN link for SW-289713 carrier propagation.
+	RegisterVxlanLink(ctx context.Context, in *VxlanLinkDef, opts ...grpc.CallOption) (*BoolResponse, error)
+	UnregisterVxlanLink(ctx context.Context, in *VxlanLinkDef, opts ...grpc.CallOption) (*BoolResponse, error)
 }
 
 type localClient struct {
@@ -137,6 +142,24 @@ func (c *localClient) GenerateNodeInterfaceName(ctx context.Context, in *Generat
 	return out, nil
 }
 
+func (c *localClient) RegisterVxlanLink(ctx context.Context, in *VxlanLinkDef, opts ...grpc.CallOption) (*BoolResponse, error) {
+	out := new(BoolResponse)
+	err := c.cc.Invoke(ctx, Local_RegisterVxlanLink_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *localClient) UnregisterVxlanLink(ctx context.Context, in *VxlanLinkDef, opts ...grpc.CallOption) (*BoolResponse, error) {
+	out := new(BoolResponse)
+	err := c.cc.Invoke(ctx, Local_UnregisterVxlanLink_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LocalServer is the server API for Local service.
 // All implementations must embed UnimplementedLocalServer
 // for forward compatibility
@@ -153,6 +176,9 @@ type LocalServer interface {
 	// Each veth name must be unique with in a node. Daemon generates an ID that
 	// is unique in this node.
 	GenerateNodeInterfaceName(context.Context, *GenerateNodeInterfaceNameRequest) (*GenerateNodeInterfaceNameResponse, error)
+	// Register an in-pod VXLAN link for SW-289713 carrier propagation.
+	RegisterVxlanLink(context.Context, *VxlanLinkDef) (*BoolResponse, error)
+	UnregisterVxlanLink(context.Context, *VxlanLinkDef) (*BoolResponse, error)
 	mustEmbedUnimplementedLocalServer()
 }
 
@@ -186,6 +212,12 @@ func (UnimplementedLocalServer) RemGRPCWire(context.Context, *WireDef) (*BoolRes
 }
 func (UnimplementedLocalServer) GenerateNodeInterfaceName(context.Context, *GenerateNodeInterfaceNameRequest) (*GenerateNodeInterfaceNameResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GenerateNodeInterfaceName not implemented")
+}
+func (UnimplementedLocalServer) RegisterVxlanLink(context.Context, *VxlanLinkDef) (*BoolResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterVxlanLink not implemented")
+}
+func (UnimplementedLocalServer) UnregisterVxlanLink(context.Context, *VxlanLinkDef) (*BoolResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnregisterVxlanLink not implemented")
 }
 func (UnimplementedLocalServer) mustEmbedUnimplementedLocalServer() {}
 
@@ -362,6 +394,42 @@ func _Local_GenerateNodeInterfaceName_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Local_RegisterVxlanLink_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VxlanLinkDef)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LocalServer).RegisterVxlanLink(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Local_RegisterVxlanLink_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LocalServer).RegisterVxlanLink(ctx, req.(*VxlanLinkDef))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Local_UnregisterVxlanLink_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VxlanLinkDef)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LocalServer).UnregisterVxlanLink(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Local_UnregisterVxlanLink_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LocalServer).UnregisterVxlanLink(ctx, req.(*VxlanLinkDef))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Local_ServiceDesc is the grpc.ServiceDesc for Local service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -405,6 +473,14 @@ var Local_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GenerateNodeInterfaceName",
 			Handler:    _Local_GenerateNodeInterfaceName_Handler,
 		},
+		{
+			MethodName: "RegisterVxlanLink",
+			Handler:    _Local_RegisterVxlanLink_Handler,
+		},
+		{
+			MethodName: "UnregisterVxlanLink",
+			Handler:    _Local_UnregisterVxlanLink_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "daemon/proto/meshnet/v1beta1/meshnet.proto",
@@ -414,6 +490,7 @@ const (
 	Remote_Update_FullMethodName             = "/meshnet.v1beta1.Remote/Update"
 	Remote_AddGRPCWireRemote_FullMethodName  = "/meshnet.v1beta1.Remote/AddGRPCWireRemote"
 	Remote_GRPCWireDownRemote_FullMethodName = "/meshnet.v1beta1.Remote/GRPCWireDownRemote"
+	Remote_SetPeerLinkState_FullMethodName   = "/meshnet.v1beta1.Remote/SetPeerLinkState"
 )
 
 // RemoteClient is the client API for Remote service.
@@ -423,6 +500,9 @@ type RemoteClient interface {
 	Update(ctx context.Context, in *RemotePod, opts ...grpc.CallOption) (*BoolResponse, error)
 	AddGRPCWireRemote(ctx context.Context, in *WireDef, opts ...grpc.CallOption) (*WireCreateResponse, error)
 	GRPCWireDownRemote(ctx context.Context, in *WireDef, opts ...grpc.CallOption) (*WireDownResponse, error)
+	// Mirror the carrier/link-state of the peer's link end onto this node
+	// (SW-289713). Opt-in via MESHNET_PROPAGATE_CARRIER.
+	SetPeerLinkState(ctx context.Context, in *WireLinkState, opts ...grpc.CallOption) (*BoolResponse, error)
 }
 
 type remoteClient struct {
@@ -460,6 +540,15 @@ func (c *remoteClient) GRPCWireDownRemote(ctx context.Context, in *WireDef, opts
 	return out, nil
 }
 
+func (c *remoteClient) SetPeerLinkState(ctx context.Context, in *WireLinkState, opts ...grpc.CallOption) (*BoolResponse, error) {
+	out := new(BoolResponse)
+	err := c.cc.Invoke(ctx, Remote_SetPeerLinkState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RemoteServer is the server API for Remote service.
 // All implementations must embed UnimplementedRemoteServer
 // for forward compatibility
@@ -467,6 +556,9 @@ type RemoteServer interface {
 	Update(context.Context, *RemotePod) (*BoolResponse, error)
 	AddGRPCWireRemote(context.Context, *WireDef) (*WireCreateResponse, error)
 	GRPCWireDownRemote(context.Context, *WireDef) (*WireDownResponse, error)
+	// Mirror the carrier/link-state of the peer's link end onto this node
+	// (SW-289713). Opt-in via MESHNET_PROPAGATE_CARRIER.
+	SetPeerLinkState(context.Context, *WireLinkState) (*BoolResponse, error)
 	mustEmbedUnimplementedRemoteServer()
 }
 
@@ -482,6 +574,9 @@ func (UnimplementedRemoteServer) AddGRPCWireRemote(context.Context, *WireDef) (*
 }
 func (UnimplementedRemoteServer) GRPCWireDownRemote(context.Context, *WireDef) (*WireDownResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GRPCWireDownRemote not implemented")
+}
+func (UnimplementedRemoteServer) SetPeerLinkState(context.Context, *WireLinkState) (*BoolResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetPeerLinkState not implemented")
 }
 func (UnimplementedRemoteServer) mustEmbedUnimplementedRemoteServer() {}
 
@@ -550,6 +645,24 @@ func _Remote_GRPCWireDownRemote_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Remote_SetPeerLinkState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WireLinkState)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RemoteServer).SetPeerLinkState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Remote_SetPeerLinkState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RemoteServer).SetPeerLinkState(ctx, req.(*WireLinkState))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Remote_ServiceDesc is the grpc.ServiceDesc for Remote service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -568,6 +681,10 @@ var Remote_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GRPCWireDownRemote",
 			Handler:    _Remote_GRPCWireDownRemote_Handler,
+		},
+		{
+			MethodName: "SetPeerLinkState",
+			Handler:    _Remote_SetPeerLinkState_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

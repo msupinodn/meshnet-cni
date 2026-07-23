@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	mpb "github.com/networkop/meshnet-cni/daemon/proto/meshnet/v1beta1"
+	"github.com/networkop/meshnet-cni/internal/cniconf"
 	"github.com/networkop/meshnet-cni/utils/wireutil"
 )
 
@@ -159,6 +160,30 @@ func makeVeth(netNS, linkName string, ip string, mtu int) (*koko.VEth, error) {
 	return &veth, nil
 }
 
+// boolResponseErr returns err when an RPC failed or returned response=false.
+// Avoids returning nil on rejected RPCs, which would make the CNI plugin emit
+// no JSON result.
+func boolResponseErr(err error, ok *mpb.BoolResponse, what string) error {
+	if err != nil {
+		return err
+	}
+	if ok == nil || !ok.Response {
+		return fmt.Errorf("%s rejected", what)
+	}
+	return nil
+}
+
+// linkMTU resolves the interface MTU from topology or MESHNET_DEFAULT_LINK_MTU.
+func linkMTU(topologyMtu int32) int {
+	if topologyMtu > 0 {
+		return int(topologyMtu)
+	}
+	if mtu, ok := cniconf.ReadDefaultLinkMTU(); ok {
+		return mtu
+	}
+	return 0
+}
+
 // -------------------------------------------------------------------------------------------------
 // Creates koko.Vxlan from ParentIF, destination IP and VNI
 func makeVxlan(srcIntf string, peerIP string, idx int64, mtu int) *koko.VxLan {
@@ -259,15 +284,15 @@ func cmdAdd(args *skel.CmdArgs) error {
 	localPod.ContainerId = args.ContainerID
 	log.Infof("Add[%s]: Setting pod alive status on meshnet daemon", string(cniArgs.K8S_POD_NAME))
 	ok, err := meshnetClient.SetAlive(ctx, localPod)
-	if err != nil || !ok.Response {
-		log.Errorf("Add[%s]: Failed to set pod alive status", string(cniArgs.K8S_POD_NAME))
+	if err := boolResponseErr(err, ok, "SetAlive"); err != nil {
+		log.Errorf("Add[%s]: Failed to set pod alive status: %v", string(cniArgs.K8S_POD_NAME), err)
 		return err
 	}
 
 	log.Infof("Add[%s]: Starting to traverse all links", string(cniArgs.K8S_POD_NAME))
 	for _, link := range localPod.Links { // Iterate over each link of the local pod
 		// Build koko's veth struct for local intf
-		myVeth, err := makeVeth(args.Netns, link.LocalIntf, link.LocalIp, int(link.Mtu))
+		myVeth, err := makeVeth(args.Netns, link.LocalIntf, link.LocalIp, linkMTU(link.Mtu))
 		if err != nil {
 			return err
 		}
@@ -306,7 +331,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 			if peerPod.SrcIp == localPod.SrcIp { // This means we're on the same host
 				log.Infof("Add[%s]: %s and %s are on the same host", string(cniArgs.K8S_POD_NAME), localPod.Name, peerPod.Name)
 				// Creating koko's Veth struct for peer intf
-				peerVeth, err := makeVeth(peerPod.NetNs, link.PeerIntf, link.PeerIp, int(link.Mtu))
+				peerVeth, err := makeVeth(peerPod.NetNs, link.PeerIntf, link.PeerIp, linkMTU(link.Mtu))
 				if err != nil {
 					log.Errorf("Add[%s]: Failed to build koko Veth struct", string(cniArgs.K8S_POD_NAME))
 					return err
@@ -393,7 +418,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 					continue
 				}
 				// Creating koko's Vxlan struct
-				vxlan := makeVxlan(srcIntf, peerPod.SrcIp, link.Uid, int(link.Mtu))
+				vxlan := makeVxlan(srcIntf, peerPod.SrcIp, link.Uid, linkMTU(link.Mtu))
 				// Checking if interface already exists
 				iExist, _ := koko.IsExistLinkInNS(myVeth.NsName, myVeth.LinkName)
 				if iExist { // If VXLAN intf exists, we need to remove it first
@@ -408,6 +433,17 @@ func cmdAdd(args *skel.CmdArgs) error {
 					return err
 				}
 
+				if _, err = meshnetClient.RegisterVxlanLink(ctx, &mpb.VxlanLinkDef{
+					LinkUid:    link.Uid,
+					NetNs:      myVeth.NsName,
+					IntfName:   myVeth.LinkName,
+					PeerNodeIp: peerPod.SrcIp,
+					KubeNs:     string(cniArgs.K8S_POD_NAMESPACE),
+				}); err != nil {
+					log.Errorf("Add[%s]: Failed to register vxlan link uid %d: %v", string(cniArgs.K8S_POD_NAME), link.Uid, err)
+					return err
+				}
+
 				// Now we need to make an API call to update the remote VTEP to point to us
 				payload := &mpb.RemotePod{
 					NetNs:    peerPod.NetNs,
@@ -417,7 +453,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 					Vni:      link.Uid + vxlanBase,
 					KubeNs:   string(cniArgs.K8S_POD_NAMESPACE),
 					NodeIntf: srcIntf,
-					Mtu:      link.Mtu,
+					Mtu:      int32(linkMTU(link.Mtu)),
 				}
 
 				url := fmt.Sprintf("%s:%d", peerPod.SrcIp, wireutil.GRPCDefaultPort)
@@ -430,8 +466,8 @@ func cmdAdd(args *skel.CmdArgs) error {
 				}
 				remoteClient := mpb.NewRemoteClient(remote)
 				ok, err := remoteClient.Update(ctx, payload)
-				if err != nil || !ok.Response {
-					log.Infof("Add[%s]: Failed to do a remote update", string(cniArgs.K8S_POD_NAME))
+				if err := boolResponseErr(err, ok, "remote Update"); err != nil {
+					log.Errorf("Add[%s]: Failed to do a remote update: %v", string(cniArgs.K8S_POD_NAME), err)
 					return err
 				}
 				log.Infof("Add[%s]: Successfully updated remote meshnet daemon", string(cniArgs.K8S_POD_NAME))
@@ -447,8 +483,8 @@ func cmdAdd(args *skel.CmdArgs) error {
 				LinkId: link.Uid,
 				KubeNs: string(cniArgs.K8S_POD_NAMESPACE),
 			})
-			if err != nil || !ok.Response {
-				log.Errorf("Add[%s]: Failed to set a skipped flag on peer %s", string(cniArgs.K8S_POD_NAME), peerPod.Name)
+			if err := boolResponseErr(err, ok, "Skip"); err != nil {
+				log.Errorf("Add[%s]: Failed to set a skipped flag on peer %s: %v", string(cniArgs.K8S_POD_NAME), peerPod.Name, err)
 				return err
 			}
 		}
@@ -549,10 +585,16 @@ func cmdDel(args *skel.CmdArgs) error {
 				linkType = "grpc"
 			} else {
 				linkType = "vxlan"
+				if _, err = meshnetClient.UnregisterVxlanLink(ctx, &mpb.VxlanLinkDef{
+					LinkUid: link.Uid,
+					KubeNs:  string(cniArgs.K8S_POD_NAMESPACE),
+				}); err != nil {
+					log.Errorf("Del: Failed to unregister vxlan link uid %d: %v", link.Uid, err)
+				}
 			}
 		}
 		// Creating koko's Veth struct for local intf
-		myVeth, err := makeVeth(args.Netns, link.LocalIntf, link.LocalIp, int(link.Mtu))
+		myVeth, err := makeVeth(args.Netns, link.LocalIntf, link.LocalIp, linkMTU(link.Mtu))
 		if err != nil {
 			log.Infof("Del: Failed to construct koko Veth struct")
 			return err

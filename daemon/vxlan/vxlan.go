@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/containernetworking/plugins/pkg/ns"
+	"github.com/networkop/meshnet-cni/internal/cniconf"
 	"github.com/networkop/meshnet-cni/internal/koko"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -22,15 +23,9 @@ func InitLogger() {
 
 // CreateOrUpdate creates or updates the vxlan on the node.
 func CreateOrUpdate(v *mpb.RemotePod) error {
-	var srcIntf string
-	var err error
-	srcIntf = v.NodeIntf
-	if srcIntf == "" {
-		/// Looking up default interface
-		_, srcIntf, err = getSource()
-		if err != nil {
-			return err
-		}
+	srcIntf, err := resolveLocalParentIF(v.NodeIntf)
+	if err != nil {
+		return err
 	}
 
 	// Creating koko Veth struct
@@ -53,11 +48,17 @@ func CreateOrUpdate(v *mpb.RemotePod) error {
 	vxLanOvrlyLogger.Infof("Created koko Veth struct %+v", veth)
 
 	// Creating koko vxlan struct
+	mtu := int(v.Mtu)
+	if mtu == 0 {
+		if d, ok := cniconf.ReadDefaultLinkMTU(); ok {
+			mtu = d
+		}
+	}
 	vxlan := koko.VxLan{
 		ParentIF: srcIntf,
 		IPAddr:   net.ParseIP(v.PeerVtep),
 		ID:       int(v.Vni),
-		MTU:      int(v.Mtu),
+		MTU:      mtu,
 	}
 	vxLanOvrlyLogger.Infof("Created koko vxlan struct %+v", vxlan)
 
@@ -150,6 +151,20 @@ func getSource() (string, string, error) {
 	}
 	srcIntf := link.Attrs().Name
 	return srcIP, srcIntf, nil
+}
+
+// resolveLocalParentIF picks the host interface for the local VXLAN VTEP.
+// RemotePod.NodeIntf names the peer's egress interface and is only used when
+// that name also exists on this node; otherwise we discover the default route iface.
+func resolveLocalParentIF(hint string) (string, error) {
+	if hint != "" {
+		if _, err := netlink.LinkByName(hint); err == nil {
+			return hint, nil
+		}
+		vxLanOvrlyLogger.Infof("peer NodeIntf %q not present locally; discovering default route iface", hint)
+	}
+	_, srcIntf, err := getSource()
+	return srcIntf, err
 }
 
 func vxlanDifferent(l1 *netlink.Vxlan, l2 koko.VxLan) bool {
