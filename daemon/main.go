@@ -69,9 +69,9 @@ func main() {
 	}
 
 	// SW-289713: re-assert local carrier to peers after recon (so a link that
-	// was down before a restart is re-signalled) and start watching host-side
-	// veth carrier to propagate link-down/up to the peer. Both are no-ops unless
-	// MESHNET_PROPAGATE_CARRIER is enabled.
+	// was down before a restart is re-signalled) and start polling in-pod
+	// datapath carrier to propagate link-down/up to the peer. Both are no-ops
+	// unless MESHNET_PROPAGATE_CARRIER is enabled.
 	grpcwire.ReassertLocalLinkStates()
 	go grpcwire.StartCarrierWatch(nil)
 	vxlan.ReassertLocalLinkStates()

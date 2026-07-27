@@ -649,7 +649,7 @@ func main() {
 	log.Infof("INTER_NODE_LINK_TYPE: %v", interNodeLinkType)
 
 	retCode := 0
-	e := skel.PluginMainWithError(cmdAdd, cmdGet, cmdDel, version.All, "CNI plugin meshnet v0.6.7-dn")
+	e := skel.PluginMainWithError(cmdAdd, cmdGet, cmdDel, version.All, "CNI plugin meshnet v0.6.8-dn")
 	if e != nil {
 		log.Errorf("failed to run meshnet cni: %v", e.Print())
 		retCode = 1

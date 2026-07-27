@@ -144,8 +144,8 @@ func GetHostIntfHndl(intfID int64) (*pcap.Handle, error) {
 }
 
 // GetWireByIfIndex returns the wire whose host-side veth has the given OS
-// interface index. Used by the carrier watcher (SW-289713) to map a netlink
-// link event back to a grpc-wire.
+// interface index. Used by SetPeerLinkState (SW-289713) to map peer_iface_id
+// back to a grpc-wire.
 func GetWireByIfIndex(ifindex int64) (*GRPCWire, bool) {
 	wires.mu.Lock()
 	defer wires.mu.Unlock()

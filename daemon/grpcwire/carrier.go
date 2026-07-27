@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/networkop/meshnet-cni/internal/carrierprop"
 	"github.com/vishvananda/netlink"
 
@@ -22,23 +23,18 @@ func InitCarrierPropagation() {
 	}
 }
 
-// StartCarrierWatch subscribes to netlink link events and, on a debounced
-// carrier up/down edge of a tracked host-side veth, notifies the peer daemon so
-// it mirrors the state onto its own veth. Blocks until stopC is closed (pass
-// nil to run for the daemon's lifetime). No-op unless carrier propagation is on.
+// StartCarrierWatch polls carrier on tracked in-pod datapath interfaces
+// (eno<N> inside the mcDNOS pod) and notifies the peer on debounced transitions.
+// We intentionally watch the pod-side port, not the host-side veth: once a peer
+// mirrors link-down via LinkSetDown on the host veth, host-side netlink stops
+// reporting carrier-up when the datapath later comes up (boot-time latch).
+// Blocks until stopC is closed (pass nil to run for the daemon's lifetime).
+// No-op unless carrier propagation is on.
 func StartCarrierWatch(stopC <-chan struct{}) {
 	if !carrierprop.Enabled() {
 		return
 	}
-
-	updates := make(chan netlink.LinkUpdate, 64)
-	done := make(chan struct{})
-	if err := netlink.LinkSubscribe(updates, done); err != nil {
-		grpcOvrlyLogger.Errorf("StartCarrierWatch: LinkSubscribe failed: %v", err)
-		return
-	}
-	defer close(done)
-	grpcOvrlyLogger.Infof("StartCarrierWatch: monitoring grpc-wire host-side veth carrier")
+	grpcOvrlyLogger.Infof("StartCarrierWatch: monitoring grpc-wire in-pod datapath carrier")
 
 	deb := carrierprop.NewDebouncer(carrierprop.Debounce)
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -48,17 +44,14 @@ func StartCarrierWatch(stopC <-chan struct{}) {
 		select {
 		case <-stopC:
 			return
-		case lu := <-updates:
-			link := lu.Link
-			if link == nil || link.Attrs() == nil {
-				continue
-			}
-			idx := int64(link.Attrs().Index)
-			if _, ok := GetWireByIfIndex(idx); !ok {
-				continue
-			}
-			deb.Observe(idx, carrierprop.OperUp(link), time.Now())
 		case now := <-ticker.C:
+			for _, wire := range snapshotWires() {
+				up, err := wireDatapathOperUp(wire)
+				if err != nil {
+					continue
+				}
+				deb.Observe(wire.LocalNodeIfaceID, up, now)
+			}
 			for _, e := range deb.Due(now) {
 				if carrierprop.ConsumeEcho(e.Key, e.Up) {
 					continue
@@ -69,13 +62,32 @@ func StartCarrierWatch(stopC <-chan struct{}) {
 	}
 }
 
+func wireDatapathOperUp(wire *GRPCWire) (bool, error) {
+	podNs, err := ns.GetNS(wire.LocalPodNetNS)
+	if err != nil {
+		return false, err
+	}
+	defer podNs.Close()
+
+	var oper bool
+	err = podNs.Do(func(_ ns.NetNS) error {
+		link, err := netlink.LinkByName(wire.LocalPodIfaceName)
+		if err != nil {
+			return err
+		}
+		oper = carrierprop.OperUp(link)
+		return nil
+	})
+	return oper, err
+}
+
 func propagateEdge(ifindex int64, up bool) {
 	wire, ok := GetWireByIfIndex(ifindex)
 	if !ok {
 		return
 	}
-	grpcOvrlyLogger.Infof("carrier: local veth %s (uid %d) went %s; notifying peer %s (peer iface %d)",
-		wire.LocalNodeIfaceName, wire.UID, carrierprop.UpStr(up), wire.PeerNodeIP, wire.WireIfaceIDOnPeerNode)
+	grpcOvrlyLogger.Infof("carrier: local datapath %s/%s (uid %d) went %s; notifying peer %s (peer iface %d)",
+		wire.LocalPodIfaceName, wire.LocalNodeIfaceName, wire.UID, carrierprop.UpStr(up), wire.PeerNodeIP, wire.WireIfaceIDOnPeerNode)
 	if err := notifyPeerLinkState(wire, up); err != nil {
 		grpcOvrlyLogger.Errorf("carrier: failed to notify peer %s for uid %d: %v", wire.PeerNodeIP, wire.UID, err)
 	}
@@ -114,17 +126,17 @@ func SetLocalVethState(ifaceID int64, linkUID int, namespace string, up bool) er
 }
 
 // ReassertLocalLinkStates re-reads the current carrier of every tracked
-// host-side veth and pushes it to the peer.
+// in-pod datapath interface and pushes it to the peer.
 func ReassertLocalLinkStates() {
 	if !carrierprop.Enabled() {
 		return
 	}
 	for _, wire := range snapshotWires() {
-		link, err := netlink.LinkByName(wire.LocalNodeIfaceName)
+		up, err := wireDatapathOperUp(wire)
 		if err != nil {
 			continue
 		}
-		if err := notifyPeerLinkState(wire, carrierprop.OperUp(link)); err != nil {
+		if err := notifyPeerLinkState(wire, up); err != nil {
 			grpcOvrlyLogger.Infof("ReassertLocalLinkStates: uid %d notify skipped: %v", wire.UID, err)
 		}
 	}
