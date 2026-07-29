@@ -22,20 +22,19 @@ func InitCarrierPropagation() {
 	}
 }
 
-// StartCarrierWatch polls carrier on the gwire host veth inside LocalPodNetNS
-// and notifies the peer on debounced transitions. On mcDNOS the datapath port
-// (eno<N>) lives in the workload container netns, while LocalPodNetNS is the
-// CNI/gwire sandbox that holds the host-side veth (LocalNodeIfaceName); that
-// veth's carrier tracks the datapath. Falls back to LocalPodIfaceName when the
-// host veth name is unavailable (standard K8s pods where both ends share the
-// CNI netns).
+// StartCarrierWatch polls carrier on the gwire host veth (host netns, gwire
+// netns fallback) and notifies the peer on debounced transitions. On mcDNOS the
+// host-side veth (LocalNodeIfaceName / LocalNodeIfaceID) lives in the host
+// default netns, not LocalPodNetNS; oper-state is read there first. Falls back
+// to LocalPodNetNS and LocalPodIfaceName for standard pods where both veth ends
+// share the CNI netns.
 // Blocks until stopC is closed (pass nil to run for the daemon's lifetime).
 // No-op unless carrier propagation is on.
 func StartCarrierWatch(stopC <-chan struct{}) {
 	if !carrierprop.Enabled() {
 		return
 	}
-	grpcOvrlyLogger.Infof("StartCarrierWatch: monitoring grpc-wire host veth carrier in gwire netns")
+	grpcOvrlyLogger.Infof("StartCarrierWatch: monitoring grpc-wire host veth carrier (host netns, gwire netns fallback)")
 
 	deb := carrierprop.NewDebouncer(carrierprop.Debounce)
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -74,6 +73,18 @@ func carrierWatchIface(wire *GRPCWire) string {
 }
 
 func wireDatapathOperUp(wire *GRPCWire) (bool, error) {
+	if wire.LocalNodeIfaceID != 0 {
+		up, err := carrierprop.OperUpOnHost(int(wire.LocalNodeIfaceID))
+		if err == nil {
+			return up, nil
+		}
+	}
+	if wire.LocalNodeIfaceName != "" {
+		up, err := carrierprop.OperUpOnHostByName(wire.LocalNodeIfaceName)
+		if err == nil {
+			return up, nil
+		}
+	}
 	name := carrierWatchIface(wire)
 	up, err := carrierprop.OperUpInPodNetNS(wire.LocalPodNetNS, name)
 	if err == nil || name == wire.LocalPodIfaceName || wire.LocalPodIfaceName == "" {

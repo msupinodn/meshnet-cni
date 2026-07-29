@@ -129,12 +129,18 @@ func TestCarrierDebouncer_IndependentInterfaces(t *testing.T) {
 }
 
 func TestCarrierWatchIfacePrefersHostVeth(t *testing.T) {
+	// carrierWatchIface names the iface used for pod-netns fallback reads.
+	// wireDatapathOperUp prefers host netns first (LocalNodeIfaceID, then
+	// LocalNodeIfaceName) before falling back to carrierWatchIface in
+	// LocalPodNetNS — required on mcDNOS where the host veth is not in the
+	// gwire/CNI netns.
 	w := &GRPCWire{
+		LocalNodeIfaceID:   42,
 		LocalNodeIfaceName: "dnos0eno1-0003",
 		LocalPodIfaceName:  "eno1",
 	}
 	if got := carrierWatchIface(w); got != "dnos0eno1-0003" {
-		t.Fatalf("want host veth name, got %q", got)
+		t.Fatalf("want host veth name for pod-netns fallback, got %q", got)
 	}
 	w.LocalNodeIfaceName = ""
 	if got := carrierWatchIface(w); got != "eno1" {

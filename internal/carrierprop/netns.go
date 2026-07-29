@@ -5,6 +5,24 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
+// OperUpOnHost reads link oper-state in the host network namespace.
+func OperUpOnHost(ifindex int) (bool, error) {
+	link, err := netlink.LinkByIndex(ifindex)
+	if err != nil {
+		return false, err
+	}
+	return OperUp(link), nil
+}
+
+// OperUpOnHostByName reads link oper-state in the host network namespace.
+func OperUpOnHostByName(name string) (bool, error) {
+	link, err := netlink.LinkByName(name)
+	if err != nil {
+		return false, err
+	}
+	return OperUp(link), nil
+}
+
 // OperUpInPodNetNS reads link oper-state inside the pod network namespace.
 // netlink.LinkByName uses a process-wide handle bound to the host netns, so
 // callers must open a per-namespace handle after setns (inside ns.Do).
