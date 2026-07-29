@@ -26,6 +26,21 @@ func TestRawFlagsUp(t *testing.T) {
 	}
 }
 
+func TestOperUpFlagsAndOperStateFallback(t *testing.T) {
+	up := func(attrs *netlink.LinkAttrs) bool {
+		return carrierprop.OperUp(&stubLink{attrs: attrs})
+	}
+	if !up(&netlink.LinkAttrs{Flags: carrierprop.IFFRunning}) {
+		t.Errorf("Flags IFF_RUNNING should be up")
+	}
+	if !up(&netlink.LinkAttrs{OperState: netlink.OperUp}) {
+		t.Errorf("OperState OperUp should be up")
+	}
+	if up(&netlink.LinkAttrs{Flags: 0x1003, OperState: netlink.OperDown}) {
+		t.Errorf("admin-up without carrier should be down")
+	}
+}
+
 type stubLink struct {
 	attrs *netlink.LinkAttrs
 }

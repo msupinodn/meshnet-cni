@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/networkop/meshnet-cni/internal/carrierprop"
 	"github.com/vishvananda/netlink"
 
@@ -63,22 +62,7 @@ func StartCarrierWatch(stopC <-chan struct{}) {
 }
 
 func wireDatapathOperUp(wire *GRPCWire) (bool, error) {
-	podNs, err := ns.GetNS(wire.LocalPodNetNS)
-	if err != nil {
-		return false, err
-	}
-	defer podNs.Close()
-
-	var oper bool
-	err = podNs.Do(func(_ ns.NetNS) error {
-		link, err := netlink.LinkByName(wire.LocalPodIfaceName)
-		if err != nil {
-			return err
-		}
-		oper = carrierprop.OperUp(link)
-		return nil
-	})
-	return oper, err
+	return carrierprop.OperUpInPodNetNS(wire.LocalPodNetNS, wire.LocalPodIfaceName)
 }
 
 func propagateEdge(ifindex int64, up bool) {

@@ -38,7 +38,15 @@ func OperUp(link netlink.Link) bool {
 	if link == nil || link.Attrs() == nil {
 		return false
 	}
-	return link.Attrs().RawFlags&IFFRunning != 0
+	attrs := link.Attrs()
+	if attrs.RawFlags&IFFRunning != 0 {
+		return true
+	}
+	// Some drivers only populate Flags / OperState in rtnl dumps.
+	if attrs.Flags&IFFRunning != 0 {
+		return true
+	}
+	return attrs.OperState == netlink.OperUp
 }
 
 func UpStr(up bool) string {

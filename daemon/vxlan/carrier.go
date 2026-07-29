@@ -47,22 +47,7 @@ func StartCarrierWatch(stopC <-chan struct{}) {
 }
 
 func linkOperUp(link *Link) (bool, error) {
-	vethNs, err := ns.GetNS(link.LocalNetNS)
-	if err != nil {
-		return false, err
-	}
-	defer vethNs.Close()
-
-	var oper bool
-	err = vethNs.Do(func(_ ns.NetNS) error {
-		l, err := netlink.LinkByName(link.LocalIntfName)
-		if err != nil {
-			return err
-		}
-		oper = carrierprop.OperUp(l)
-		return nil
-	})
-	return oper, err
+	return carrierprop.OperUpInPodNetNS(link.LocalNetNS, link.LocalIntfName)
 }
 
 func propagateEdge(linkUID int, up bool) {
