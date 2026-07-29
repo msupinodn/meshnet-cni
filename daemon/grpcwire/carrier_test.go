@@ -128,6 +128,20 @@ func TestCarrierDebouncer_IndependentInterfaces(t *testing.T) {
 	}
 }
 
+func TestCarrierWatchIfacePrefersHostVeth(t *testing.T) {
+	w := &GRPCWire{
+		LocalNodeIfaceName: "dnos0eno1-0003",
+		LocalPodIfaceName:  "eno1",
+	}
+	if got := carrierWatchIface(w); got != "dnos0eno1-0003" {
+		t.Fatalf("want host veth name, got %q", got)
+	}
+	w.LocalNodeIfaceName = ""
+	if got := carrierWatchIface(w); got != "eno1" {
+		t.Fatalf("want pod iface fallback, got %q", got)
+	}
+}
+
 func TestGetWireByIfIndex(t *testing.T) {
 	w := &GRPCWire{
 		UID:                7,

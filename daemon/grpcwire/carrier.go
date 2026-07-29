@@ -22,18 +22,20 @@ func InitCarrierPropagation() {
 	}
 }
 
-// StartCarrierWatch polls carrier on tracked in-pod datapath interfaces
-// (eno<N> inside the mcDNOS pod) and notifies the peer on debounced transitions.
-// We intentionally watch the pod-side port, not the host-side veth: once a peer
-// mirrors link-down via LinkSetDown on the host veth, host-side netlink stops
-// reporting carrier-up when the datapath later comes up (boot-time latch).
+// StartCarrierWatch polls carrier on the gwire host veth inside LocalPodNetNS
+// and notifies the peer on debounced transitions. On mcDNOS the datapath port
+// (eno<N>) lives in the workload container netns, while LocalPodNetNS is the
+// CNI/gwire sandbox that holds the host-side veth (LocalNodeIfaceName); that
+// veth's carrier tracks the datapath. Falls back to LocalPodIfaceName when the
+// host veth name is unavailable (standard K8s pods where both ends share the
+// CNI netns).
 // Blocks until stopC is closed (pass nil to run for the daemon's lifetime).
 // No-op unless carrier propagation is on.
 func StartCarrierWatch(stopC <-chan struct{}) {
 	if !carrierprop.Enabled() {
 		return
 	}
-	grpcOvrlyLogger.Infof("StartCarrierWatch: monitoring grpc-wire in-pod datapath carrier")
+	grpcOvrlyLogger.Infof("StartCarrierWatch: monitoring grpc-wire host veth carrier in gwire netns")
 
 	deb := carrierprop.NewDebouncer(carrierprop.Debounce)
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -47,6 +49,8 @@ func StartCarrierWatch(stopC <-chan struct{}) {
 			for _, wire := range snapshotWires() {
 				up, err := wireDatapathOperUp(wire)
 				if err != nil {
+					grpcOvrlyLogger.Infof("carrier watch: uid %d ifidx %d oper read err: %v (ns=%q host=%q pod=%q)",
+						wire.UID, wire.LocalNodeIfaceID, err, wire.LocalPodNetNS, wire.LocalNodeIfaceName, wire.LocalPodIfaceName)
 					continue
 				}
 				deb.Observe(wire.LocalNodeIfaceID, up, now)
@@ -61,7 +65,20 @@ func StartCarrierWatch(stopC <-chan struct{}) {
 	}
 }
 
+// carrierWatchIface returns the interface to poll inside LocalPodNetNS.
+func carrierWatchIface(wire *GRPCWire) string {
+	if wire.LocalNodeIfaceName != "" {
+		return wire.LocalNodeIfaceName
+	}
+	return wire.LocalPodIfaceName
+}
+
 func wireDatapathOperUp(wire *GRPCWire) (bool, error) {
+	name := carrierWatchIface(wire)
+	up, err := carrierprop.OperUpInPodNetNS(wire.LocalPodNetNS, name)
+	if err == nil || name == wire.LocalPodIfaceName || wire.LocalPodIfaceName == "" {
+		return up, err
+	}
 	return carrierprop.OperUpInPodNetNS(wire.LocalPodNetNS, wire.LocalPodIfaceName)
 }
 
