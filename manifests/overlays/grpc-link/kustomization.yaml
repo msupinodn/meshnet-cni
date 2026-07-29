@@ -30,4 +30,4 @@ resources:
 - ../../base/
 images:
 - name: public.ecr.aws/drivenets/meshnet-cni
-  newTag: v0.6.10-dn
+  newTag: v0.6.11-dn

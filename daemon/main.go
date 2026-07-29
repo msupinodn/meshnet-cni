@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/networkop/meshnet-cni/daemon/cni"
 	"github.com/networkop/meshnet-cni/daemon/grpcwire"
@@ -68,14 +69,17 @@ func main() {
 		// generate error and continue
 	}
 
-	// SW-289713: re-assert local carrier to peers after recon (so a link that
-	// was down before a restart is re-signalled) and start polling in-pod
-	// datapath carrier to propagate link-down/up to the peer. Both are no-ops
-	// unless MESHNET_PROPAGATE_CARRIER is enabled.
-	grpcwire.ReassertLocalLinkStates()
+	// SW-289713: poll host-veth carrier and propagate debounced transitions to
+	// the peer. Re-assert runs after Serve is accepting dials (Reassert before
+	// Serve used to hit DeadlineExceeded on peer notify). Both are no-ops unless
+	// MESHNET_PROPAGATE_CARRIER is enabled.
 	go grpcwire.StartCarrierWatch(nil)
-	vxlan.ReassertLocalLinkStates()
 	go vxlan.StartCarrierWatch(nil)
+	go func() {
+		time.Sleep(2 * time.Second)
+		grpcwire.ReassertLocalLinkStates()
+		vxlan.ReassertLocalLinkStates()
+	}()
 
 	// Clear the readiness taint that kept workload pods off this node, but only
 	// once meshnet CNI can actually wire pods: the conflist must be present on

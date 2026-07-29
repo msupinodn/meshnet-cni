@@ -102,6 +102,12 @@ func NewDebouncer(debounce time.Duration) *Debouncer {
 }
 
 func (d *Debouncer) Observe(key int64, up bool, now time.Time) {
+	// Carrier watch polls every 100ms; only reset the debounce timer when the
+	// sampled oper-state changes. Re-arming on every identical sample would push
+	// the deadline forward forever and suppress all edges.
+	if prev, ok := d.pending[key]; ok && prev == up {
+		return
+	}
 	d.pending[key] = up
 	d.deadline[key] = now.Add(d.debounce)
 }
