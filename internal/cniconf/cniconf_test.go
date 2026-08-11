@@ -50,3 +50,26 @@ func TestLookupDatapathIfacePrefix(t *testing.T) {
 		}
 	})
 }
+
+func TestLookupInterNodeLinkType(t *testing.T) {
+	orig := InterNodeLinkTypeConf
+	t.Cleanup(func() { InterNodeLinkTypeConf = orig })
+
+	t.Run("missing file defaults to GRPC", func(t *testing.T) {
+		InterNodeLinkTypeConf = filepath.Join(t.TempDir(), "missing")
+		if got := LookupInterNodeLinkType(); got != "GRPC" {
+			t.Fatalf("got %q, want GRPC", got)
+		}
+	})
+
+	t.Run("VXLAN file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vxlan")
+		if err := os.WriteFile(path, []byte("VXLAN"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		InterNodeLinkTypeConf = path
+		if got := LookupInterNodeLinkType(); got != "VXLAN" {
+			t.Fatalf("got %q, want VXLAN", got)
+		}
+	})
+}
