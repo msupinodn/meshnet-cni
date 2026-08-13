@@ -80,6 +80,9 @@ func CreateUpdateGRPCWireRemoteTriggered(wireDef *mpb.WireDef, stopC chan struct
 	grpcWire, ok := UpdateWireByUID(wireDef.LocalPodNetNs, int(wireDef.LinkUid), wireDef.WireIfIdOnPeerNode, stopC)
 	if ok {
 		grpcOvrlyLogger.Infof("[CREATE-UPDATE-WIRE] At remote end this grpc-wire is already created by %s. Local interface id : %d peer interface id : %d", grpcWire.Originator, grpcWire.LocalNodeIfaceID, grpcWire.WireIfaceIDOnPeerNode)
+		if err := grpcWire.K8sStoreGWire(); err != nil {
+			grpcOvrlyLogger.Errorf("[CREATE-UPDATE-WIRE] failed to persist updated peer interface id for link %d: %v", wireDef.LinkUid, err)
+		}
 		return grpcWire, nil
 	}
 

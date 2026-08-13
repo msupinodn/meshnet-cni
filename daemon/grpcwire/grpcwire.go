@@ -168,9 +168,7 @@ func (wire *GRPCWire) UpdateWire(peerIntfId int64, stopC chan struct{}) {
 	wire.mu.Lock()
 	defer wire.mu.Unlock()
 	wire.StopC = stopC
-	if !wire.IsReady {
-		wire.WireIfaceIDOnPeerNode = peerIntfId
-	}
+	wire.WireIfaceIDOnPeerNode = peerIntfId
 	wire.IsReady = true
 }
 
@@ -198,9 +196,7 @@ func UpdateWireByUID(namespace string, linkUID int, peerIntfId int64, stopC chan
 	}]
 	if ok {
 		wire.StopC = stopC
-		if !wire.IsReady {
-			wire.WireIfaceIDOnPeerNode = peerIntfId
-		}
+		wire.WireIfaceIDOnPeerNode = peerIntfId
 		wire.IsReady = true
 	}
 	return wire, ok
@@ -275,6 +271,12 @@ func DeletePodWires(namespace string, podName string) error {
 	if errs.Err() != nil {
 		return fmt.Errorf("[WIRE-DELETE]:failed to remove all grpc-wires for pod %s@%s: %w", podName, namespace, errs.Err())
 	}
+
+	ctx := context.Background()
+	if err := deleteGRPCWireStatusByPod(ctx, namespace, podName); err != nil {
+		return fmt.Errorf("[WIRE-DELETE]:failed to remove orphaned grpc-wire status for pod %s@%s: %w", podName, namespace, err)
+	}
+
 	grpcOvrlyLogger.Infof("[WIRE-DELETE]:All grpc-wires for pod %s:%s is deleted", namespace, podName)
 	return nil
 }
