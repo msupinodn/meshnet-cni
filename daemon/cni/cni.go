@@ -13,6 +13,7 @@ import (
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/networkop/meshnet-cni/internal/cniconf"
+	"github.com/networkop/meshnet-cni/utils/wireutil"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -118,7 +119,8 @@ func saveConfList(m map[string]interface{}) error {
 }
 
 func saveInterNodeLinkConf() error {
-	return ioutil.WriteFile(interNodeLinkConf, []byte(os.Getenv("INTER_NODE_LINK_TYPE")), os.FileMode(0644))
+	linkType := wireutil.ResolveInterNodeLinkType(os.Getenv("INTER_NODE_LINK_TYPE"))
+	return ioutil.WriteFile(interNodeLinkConf, []byte(linkType), os.FileMode(0644))
 }
 
 func saveDatapathIfacePrefixConf() error {

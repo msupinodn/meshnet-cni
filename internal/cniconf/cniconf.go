@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/networkop/meshnet-cni/utils/wireutil"
 )
 
 // DatapathIfacePrefixConf is written by meshnetd when MESHNET_DATAPATH_IFACE_PREFIX is set.
@@ -12,6 +14,10 @@ var DatapathIfacePrefixConf = "/etc/cni/net.d/meshnet-datapath-iface-prefix"
 
 // DefaultLinkMTUConf is written by meshnetd when MESHNET_DEFAULT_LINK_MTU is set.
 var DefaultLinkMTUConf = "/etc/cni/net.d/meshnet-default-link-mtu"
+
+// InterNodeLinkTypeConf is written by meshnetd from INTER_NODE_LINK_TYPE.
+// The CNI plugin reads this file because kubelet invokes it without the daemon env.
+var InterNodeLinkTypeConf = "/etc/cni/net.d/meshnet-inter-node-link-type"
 
 // LookupDatapathIfacePrefix reports whether default admin-down is configured.
 //
@@ -37,4 +43,13 @@ func ReadDefaultLinkMTU() (int, bool) {
 		return 0, false
 	}
 	return v, true
+}
+
+// LookupInterNodeLinkType returns GRPC or VXLAN from the host file written by meshnetd.
+func LookupInterNodeLinkType() string {
+	b, err := os.ReadFile(InterNodeLinkTypeConf)
+	if err != nil {
+		return wireutil.INTER_NODE_LINK_GRPC
+	}
+	return wireutil.ResolveInterNodeLinkType(string(b))
 }

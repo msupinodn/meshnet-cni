@@ -48,7 +48,7 @@ var (
 	localDaemon = localhost + ":" + fmt.Sprintf("%d", wireutil.GRPCDefaultPort)
 )
 
-var interNodeLinkType = wireutil.INTER_NODE_LINK_VXLAN
+var interNodeLinkType = wireutil.INTER_NODE_LINK_GRPC
 
 type netConf struct {
 	types.NetConf
@@ -624,18 +624,9 @@ func cmdDel(args *skel.CmdArgs) error {
 }
 
 func SetInterNodeLinkType() {
-	// TODO: Find a more appropriate (if any) way to figure out intended link type
-	// As of today, daemon gets the intended link type from env INTER_NODE_LINK_TYPE
-	// which is set by deployment file. The daemon further propagates this to plugin
-	// via means of file on host (which is read below) containing the value GRPC or VXLAN
-	b, err := os.ReadFile("/etc/cni/net.d/meshnet-inter-node-link-type")
-	if err != nil {
-		log.Warningf("Could not read iner node link type: %v", err)
-		// use the default value
-		return
-	}
-
-	interNodeLinkType = string(b)
+	// kubelet invokes the CNI plugin without the meshnet DaemonSet env, so meshnetd
+	// propagates INTER_NODE_LINK_TYPE via a host file. GRPC is the default when missing.
+	interNodeLinkType = cniconf.LookupInterNodeLinkType()
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -649,7 +640,7 @@ func main() {
 	log.Infof("INTER_NODE_LINK_TYPE: %v", interNodeLinkType)
 
 	retCode := 0
-	e := skel.PluginMainWithError(cmdAdd, cmdGet, cmdDel, version.All, "CNI plugin meshnet v0.6.11-dn")
+	e := skel.PluginMainWithError(cmdAdd, cmdGet, cmdDel, version.All, "CNI plugin meshnet v0.6.13-dn")
 	if e != nil {
 		log.Errorf("failed to run meshnet cni: %v", e.Print())
 		retCode = 1

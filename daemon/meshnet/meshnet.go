@@ -129,7 +129,7 @@ func New(cfg Config) (*Meshnet, error) {
 	// Otherwise there will be GRPC log for every packet sent as for link type GRPC, GRPC is also the data-plane. This is too
 	// much of log that does not help in debugging and K8S does log rotation very frequently.
 	var svr *grpc.Server
-	lnkTyp := os.Getenv("INTER_NODE_LINK_TYPE")
+	lnkTyp := wireutil.ResolveInterNodeLinkType(os.Getenv("INTER_NODE_LINK_TYPE"))
 	if lnkTyp == wireutil.INTER_NODE_LINK_GRPC {
 		svr = grpc.NewServer(cfg.GRPCOpts...)
 	} else {

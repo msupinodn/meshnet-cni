@@ -2,6 +2,7 @@ package wireutil
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/safchain/ethtool"
@@ -12,6 +13,19 @@ const (
 	INTER_NODE_LINK_VXLAN = "VXLAN"
 	INTER_NODE_LINK_GRPC  = "GRPC"
 )
+
+// ResolveInterNodeLinkType returns the configured inter-node link type.
+// GRPC is the default when env or file content is unset or invalid.
+func ResolveInterNodeLinkType(value string) string {
+	switch strings.TrimSpace(value) {
+	case INTER_NODE_LINK_VXLAN:
+		return INTER_NODE_LINK_VXLAN
+	case INTER_NODE_LINK_GRPC:
+		return INTER_NODE_LINK_GRPC
+	default:
+		return INTER_NODE_LINK_GRPC
+	}
+}
 
 func SetTxChecksumOff(intfName, nsName string) error {
 	var vethNs ns.NetNS

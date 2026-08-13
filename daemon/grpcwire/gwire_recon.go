@@ -306,12 +306,11 @@ func updateGRPCWireStatus(ctx context.Context, wStatus *grpcwirev1.GWireStatus) 
 			grpcOvrlyLogger.Errorf("updateGRPCWireStatus: gwireItems is nil in GWireKObj status")
 			return err
 		}
-		newItem, err := runtime.DefaultUnstructuredConverter.ToUnstructured(wStatus)
+		gwireItems, err = upsertGRPCWireItems(gwireItems, wStatus)
 		if err != nil {
-			grpcOvrlyLogger.Errorf("updateGRPCWireStatus: could not convert to unstructured: %v\n", err)
+			grpcOvrlyLogger.Errorf("updateGRPCWireStatus: could not upsert gwire item: %v", err)
 			return err
 		}
-		gwireItems = append(gwireItems, newItem)
 
 		if err := unstructured.SetNestedField(wObjsOnNd.Object, gwireItems, kStatus, kGrpcWireItems); err != nil {
 			grpcOvrlyLogger.Errorf("updateGRPCWireStatus: could not set grpcwireitems status: %v", err)
@@ -443,7 +442,7 @@ func deleteGRPCWireStatus(ctx context.Context, wStatus *grpcwirev1.GWireStatus) 
 // -----------------------------------------------------------------------------------------------------------
 // reCreateGWire writes the wire status 'wStatus' retrieved from k8s data-store into local memory database
 // 'in-memory wire-map' and starts pod to daemon packet receive thread for this wire.
-func reCreateGWire(wStatus grpcwirev1.GWireStatus, _ context.Context) error {
+func reCreateGWire(wStatus grpcwirev1.GWireStatus, ctx context.Context) error {
 
 	grpcWire, ok := GetWireByUID(wStatus.LocalPodNetNs, int(wStatus.LinkId))
 	if ok && grpcWire.IsReady {
@@ -464,6 +463,9 @@ func reCreateGWire(wStatus grpcwirev1.GWireStatus, _ context.Context) error {
 	}
 	err := reconLocalGRPCWire(&wireDef)
 	if err != nil {
+		if delErr := deleteGRPCWireStatus(ctx, &wStatus); delErr != nil {
+			grpcOvrlyLogger.Errorf("reCreateGWire: failed to prune stale wire from k8s: %v", delErr)
+		}
 		return fmt.Errorf("reCreateGWire: Failed to reconciliate local end of the GRPC channel: %v", err)
 	}
 
@@ -500,6 +502,135 @@ func reconLocalGRPCWire(wireDef *mpb.WireDef) error {
 			grpcOvrlyLogger.Errorf("reconLocalGRPCWire: RecvFrmLocalPodThread exited with error: %v", err)
 		}
 	}()
+
+	return nil
+}
+
+// upsertGRPCWireItems merges wStatus into the existing grpcWireItems slice.
+// For the same (link_id, topo_namespace, local_node_name, local_pod_net_ns) the
+// entry is replaced. Entries with the same link_id and local_pod_name but a
+// different local_pod_net_ns are removed (stale pod incarnation after recycle).
+func upsertGRPCWireItems(gwireItems []interface{}, wStatus *grpcwirev1.GWireStatus) ([]interface{}, error) {
+	newItem, err := runtime.DefaultUnstructuredConverter.ToUnstructured(wStatus)
+	if err != nil {
+		return nil, err
+	}
+
+	newList := make([]interface{}, 0, len(gwireItems)+1)
+	replaced := false
+	for _, gwireItem := range gwireItems {
+		gwireStatusItem, ok := gwireItem.(map[string]interface{})
+		if !ok {
+			newList = append(newList, gwireItem)
+			continue
+		}
+		existing := grpcwirev1.GWireStatus{}
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(gwireStatusItem, &existing); err != nil {
+			newList = append(newList, gwireItem)
+			continue
+		}
+
+		if existing.LinkId == wStatus.LinkId &&
+			existing.LocalPodName == wStatus.LocalPodName &&
+			existing.LocalPodNetNs != wStatus.LocalPodNetNs {
+			continue
+		}
+
+		if existing.LinkId == wStatus.LinkId &&
+			existing.TopoNamespace == wStatus.TopoNamespace &&
+			existing.LocalNodeName == wStatus.LocalNodeName &&
+			existing.LocalPodNetNs == wStatus.LocalPodNetNs {
+			if !replaced {
+				newList = append(newList, newItem)
+				replaced = true
+			}
+			continue
+		}
+
+		newList = append(newList, gwireStatusItem)
+	}
+
+	if !replaced {
+		newList = append(newList, newItem)
+	}
+	return newList, nil
+}
+
+// deleteGRPCWireStatusByPod removes all grpcWireItems for podName from the
+// node's gwirekobj in topoNamespace. Used after in-memory wires are drained so
+// orphaned K8s records from prior pod incarnations are also cleaned up.
+func deleteGRPCWireStatusByPod(ctx context.Context, topoNamespace, podName string) error {
+	nodeName, err := findNodeName()
+	if err != nil {
+		return err
+	}
+
+	wStatus := &grpcwirev1.GWireStatus{
+		LocalNodeName: nodeName,
+		TopoNamespace: topoNamespace,
+	}
+
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		node, err := gWClient.GetWireObjGrpUS(ctx, wStatus)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			grpcOvrlyLogger.Errorf("deleteGRPCWireStatusByPod: failed to read node %s from K8s: %v", nodeName, err)
+			return err
+		}
+
+		gwireItems, found, err := unstructured.NestedSlice(node.Object, kStatus, kGrpcWireItems)
+		if err != nil {
+			grpcOvrlyLogger.Errorf("deleteGRPCWireStatusByPod: could not retrieve gWireItems: %v", err)
+			return err
+		}
+		if !found || gwireItems == nil {
+			return nil
+		}
+
+		newSList := make([]interface{}, 0, len(gwireItems))
+		removed := 0
+		for _, gwireItem := range gwireItems {
+			gwireStatusItem, ok := gwireItem.(map[string]interface{})
+			if !ok {
+				newSList = append(newSList, gwireItem)
+				continue
+			}
+			gwireStatus := grpcwirev1.GWireStatus{}
+			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(gwireStatusItem, &gwireStatus); err != nil {
+				newSList = append(newSList, gwireItem)
+				continue
+			}
+			if gwireStatus.LocalPodName == podName {
+				removed++
+				continue
+			}
+			newSList = append(newSList, gwireStatusItem)
+		}
+		if removed == 0 {
+			return nil
+		}
+
+		if err := unstructured.SetNestedField(node.Object, newSList, kStatus, kGrpcWireItems); err != nil {
+			grpcOvrlyLogger.Errorf("deleteGRPCWireStatusByPod: could not update kGrpcWireItems in status: %v", err)
+			return err
+		}
+		_, err = gWClient.UpdateWireObj(ctx, topoNamespace, node)
+		if err == nil {
+			grpcOvrlyLogger.Infof("deleteGRPCWireStatusByPod: deleted %d orphaned GRPCWire status entries on node %s for pod %s",
+				removed, nodeName, podName)
+		}
+		return err
+	})
+	if retryErr != nil {
+		log.WithFields(log.Fields{
+			"daemon":   "meshnetd",
+			"err":      retryErr,
+			"function": "deleteGRPCWireStatusByPod",
+		}).Errorf("Failed to delete wire status for pod %s on node %s", podName, nodeName)
+		return retryErr
+	}
 
 	return nil
 }

@@ -32,7 +32,7 @@ spec:
         - name: meshnet
           securityContext:
             privileged: true
-          image: public.ecr.aws/drivenets/meshnet-cni:v0.6.11-dn
+          image: public.ecr.aws/drivenets/meshnet-cni:v0.6.13-dn
           imagePullPolicy: IfNotPresent
           command: ["./entrypoint.sh"]
           resources:
@@ -48,8 +48,7 @@ spec:
                 fieldRef:
                   fieldPath: status.hostIP
             - name: INTER_NODE_LINK_TYPE
-              #value: GRPC
-              value: VXLAN
+              value: GRPC
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
