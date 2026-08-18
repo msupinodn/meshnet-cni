@@ -39,6 +39,7 @@ func OperUpInPodNetNS(netNSPath, ifaceName string) (bool, error) {
 		if err != nil {
 			return err
 		}
+		defer h.Delete()
 
 		link, err := h.LinkByName(ifaceName)
 		if err != nil {
